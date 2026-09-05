@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+FAILED=0
+
+echo -e "${YELLOW}Running frontend checks...${NC}"
+echo ""
+
+# 1. Lint (oxlint)
+echo -e "${YELLOW}[1/2] Frontend lint (oxlint)...${NC}"
+if command -v npm &>/dev/null; then
+    cd "$ROOT"
+    if npm run lint --silent 2>&1; then
+        echo -e "${GREEN}  ✓ Frontend lint OK${NC}"
+    else
+        echo -e "${RED}  ✗ Frontend lint failed${NC}"
+        FAILED=1
+    fi
+else
+    echo -e "${YELLOW}  ⚠ npm not found, skipping${NC}"
+fi
+
+# 2. Typecheck (vite build in dev mode)
+echo ""
+echo -e "${YELLOW}[2/2] Frontend typecheck (vite build)...${NC}"
+if command -v npm &>/dev/null; then
+    cd "$ROOT"
+    if npx vite build --mode development 2>&1 | tail -5; then
+        echo -e "${GREEN}  ✓ Frontend typecheck OK${NC}"
+    else
+        echo -e "${RED}  ✗ Frontend typecheck failed${NC}"
+        FAILED=1
+    fi
+else
+    echo -e "${YELLOW}  ⚠ npm not found, skipping${NC}"
+fi
+
+echo ""
+if [ "$FAILED" -eq 1 ]; then
+    echo -e "${RED}Frontend checks FAILED.${NC}"
+    exit 1
+else
+    echo -e "${GREEN}All frontend checks passed!${NC}"
+    exit 0
+fi

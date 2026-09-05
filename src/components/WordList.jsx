@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { api, playAudioWithBuffer } from '../api';
-import { Volume2, Trash2, Loader2, RefreshCw, Pencil, Check, X } from 'lucide-react';
+import { Volume2, Trash2, Loader2, RefreshCw, Pencil, Check, X, Search } from 'lucide-react';
 
 export default function WordList() {
   const [words, setWords] = useState([]);
@@ -10,6 +10,7 @@ export default function WordList() {
   const [editEnglish, setEditEnglish] = useState('');
   const [editGerman, setEditGerman] = useState('');
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
 
   const fetchWords = async () => {
     setLoading(true);
@@ -27,6 +28,14 @@ export default function WordList() {
   useEffect(() => {
     fetchWords();
   }, []);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return words;
+    const q = search.toLowerCase();
+    return words.filter(
+      w => w.english_word.toLowerCase().includes(q) || w.german_word.toLowerCase().includes(q)
+    );
+  }, [words, search]);
 
   const handleDelete = async (id) => {
     try {
@@ -72,42 +81,71 @@ export default function WordList() {
 
   if (loading && words.length === 0) {
     return (
-      <div className="card" style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}>
-        <Loader2 className="animate-spin" size={48} color="var(--accent-color)" />
+      <div className="card">
+        {[1, 2, 3, 4, 5].map(i => (
+          <div key={i} className="skeleton-row">
+            <div className="skeleton skeleton-text" style={{ maxWidth: '35%' }} />
+            <div className="skeleton skeleton-text" style={{ maxWidth: '35%' }} />
+            <div className="skeleton skeleton-icon" />
+            <div className="skeleton skeleton-icon" />
+          </div>
+        ))}
       </div>
     );
   }
 
   return (
     <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <h2 style={{ fontSize: '1.5rem' }}>Your Vocabulary ({words.length})</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+        <h2>Your Vocabulary ({words.length})</h2>
         <button onClick={fetchWords} className="btn-icon" title="Refresh">
-          <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
+          <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
         </button>
       </div>
 
       {error && <div className="status-msg error">{error}</div>}
 
+      {words.length > 0 && (
+        <div className="search-wrapper">
+          <Search size={16} className="search-icon" />
+          <input
+            type="text"
+            className="search-input"
+            placeholder="Search words or phrases..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      )}
+
       {words.length === 0 && !loading && (
-        <div style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--text-secondary)' }}>
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <Volume2 size={48} />
+          </div>
           <p>No words added yet.</p>
-          <p style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>Go to 'Add Word' to get started!</p>
+          <p className="hint">Go to 'Add Word' to get started!</p>
+        </div>
+      )}
+
+      {filtered.length === 0 && words.length > 0 && (
+        <div className="empty-state">
+          <p>No matches for "{search}"</p>
         </div>
       )}
 
       <div className="word-list">
-        {words.map(word => (
+        {filtered.map(word => (
           <div key={word.id} className="word-item">
             {editingId === word.id ? (
               <>
-                <div style={{ flex: 1, display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
                   <input
                     type="text"
                     className="text-input"
                     value={editEnglish}
                     onChange={(e) => setEditEnglish(e.target.value)}
-                    style={{ flex: 1, minWidth: '120px', padding: '0.5rem 0.75rem', fontSize: '1rem' }}
+                    style={{ flex: '1 1 100px', padding: '0.45rem 0.65rem', fontSize: '0.9rem' }}
                     autoFocus
                     disabled={saving}
                   />
@@ -117,7 +155,7 @@ export default function WordList() {
                     className="text-input"
                     value={editGerman}
                     onChange={(e) => setEditGerman(e.target.value)}
-                    style={{ flex: 1, minWidth: '120px', padding: '0.5rem 0.75rem', fontSize: '1rem', color: '#a78bfa' }}
+                    style={{ flex: '1 1 100px', padding: '0.45rem 0.65rem', fontSize: '0.9rem', color: '#a78bfa' }}
                     disabled={saving}
                   />
                 </div>
@@ -129,10 +167,10 @@ export default function WordList() {
                     disabled={saving || !editEnglish.trim() || !editGerman.trim()}
                     style={{ color: 'var(--success-color)' }}
                   >
-                    {saving ? <Loader2 size={20} className="animate-spin" /> : <Check size={20} />}
+                    {saving ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
                   </button>
                   <button className="btn-icon" onClick={cancelEdit} title="Cancel" disabled={saving}>
-                    <X size={20} />
+                    <X size={18} />
                   </button>
                 </div>
               </>
@@ -145,13 +183,13 @@ export default function WordList() {
                 </div>
                 <div className="word-actions">
                   <button className="btn-icon" onClick={() => playAudio(word.audio_url)} title="Play Audio">
-                    <Volume2 size={20} />
+                    <Volume2 size={18} />
                   </button>
                   <button className="btn-icon" onClick={() => startEdit(word)} title="Edit">
-                    <Pencil size={20} />
+                    <Pencil size={18} />
                   </button>
                   <button className="btn-icon danger" onClick={() => handleDelete(word.id)} title="Delete">
-                    <Trash2 size={20} />
+                    <Trash2 size={18} />
                   </button>
                 </div>
               </>

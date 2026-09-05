@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { api, playAudioWithBuffer } from '../api';
 import { Plus, Volume2, Loader2, Languages } from 'lucide-react';
 
-export default function AddWordForm({ onWordAdded }) {
+export default function AddWordForm() {
   const [text, setText] = useState('');
   const [sourceLang, setSourceLang] = useState('en');
   const [status, setStatus] = useState(null);
@@ -12,18 +12,17 @@ export default function AddWordForm({ onWordAdded }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!text.trim()) return;
-    
+
     setLoading(true);
     setStatus(null);
     setLastAdded(null);
-    
+
     try {
       const entryType = text.trim().includes(' ') ? 'phrase' : 'word';
       const word = await api.addWord(text, sourceLang, entryType);
-      setStatus({ type: 'success', msg: `Added successfully!` });
+      setStatus({ type: 'success', msg: 'Added successfully!' });
       setLastAdded(word);
       setText('');
-      if (onWordAdded) onWordAdded(word);
     } catch (err) {
       setStatus({ type: 'error', msg: err.message });
     } finally {
@@ -37,19 +36,22 @@ export default function AddWordForm({ onWordAdded }) {
 
   return (
     <div className="card">
-      <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem' }}>Add a word or phrase</h2>
-      
+      <h2>Add a word or phrase</h2>
+      <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.35rem', marginBottom: '1.5rem' }}>
+        Type a word or sentence in English or German.
+      </p>
+
       {status && (
         <div className={`status-msg ${status.type}`}>
           {status.msg}
         </div>
       )}
-      
+
       <form onSubmit={handleSubmit}>
-        <div className="input-group" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: '200px' }}>
+        <div className="input-group" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 200px' }}>
             <label className="input-label" htmlFor="word-input">
-              Word
+              Word or Phrase
             </label>
             <input
               id="word-input"
@@ -61,8 +63,8 @@ export default function AddWordForm({ onWordAdded }) {
               disabled={loading}
             />
           </div>
-          
-          <div style={{ width: '150px' }}>
+
+          <div style={{ flex: '0 0 auto', minWidth: '130px' }}>
             <label className="input-label" htmlFor="lang-select">
               Language
             </label>
@@ -73,31 +75,31 @@ export default function AddWordForm({ onWordAdded }) {
                 value={sourceLang}
                 onChange={(e) => setSourceLang(e.target.value)}
                 disabled={loading}
-                style={{ appearance: 'none', paddingLeft: '2.5rem' }}
+                style={{ appearance: 'none', paddingLeft: '2.25rem' }}
               >
                 <option value="en">English</option>
                 <option value="de">German</option>
               </select>
-              <Languages size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+              <Languages size={16} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
             </div>
           </div>
         </div>
-        
+
         <button type="submit" className="btn-primary" disabled={loading || !text.trim()}>
-          {loading ? <Loader2 className="animate-spin" /> : <Plus />}
+          {loading ? <Loader2 className="animate-spin" size={18} /> : <Plus size={18} />}
           {loading ? 'Translating & Generating Audio...' : 'Add Entry'}
         </button>
       </form>
 
       {lastAdded && (
-        <div style={{ marginTop: '2rem', padding: '1.5rem', background: 'rgba(255,255,255,0.05)', borderRadius: '12px' }}>
-          <h3 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Recently Added:</h3>
+        <div className="recently-added">
+          <h3>Recently Added</h3>
           <div className="word-item-content">
             <span className="word-lang">{lastAdded.english_word}</span>
             <span className="word-separator">↔</span>
             <span className="word-lang german">{lastAdded.german_word}</span>
             <button className="btn-icon" onClick={() => playAudio(lastAdded.audio_url)} title="Play Audio">
-              <Volume2 size={24} />
+              <Volume2 size={20} />
             </button>
           </div>
         </div>
