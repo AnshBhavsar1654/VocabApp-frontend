@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const API_URL = import.meta.env.API_URL || "http://localhost:8000";
 
 export const api = {
   addWord: async (text, source_lang, entry_type = "word") => {
