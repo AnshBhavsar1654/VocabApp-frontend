@@ -18,7 +18,8 @@ export default function AddWordForm({ onWordAdded }) {
     setLastAdded(null);
     
     try {
-      const word = await api.addWord(text, sourceLang);
+      const entryType = text.trim().includes(' ') ? 'phrase' : 'word';
+      const word = await api.addWord(text, sourceLang, entryType);
       setStatus({ type: 'success', msg: `Added successfully!` });
       setLastAdded(word);
       setText('');
@@ -36,7 +37,7 @@ export default function AddWordForm({ onWordAdded }) {
 
   return (
     <div className="card">
-      <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem' }}>Add a new word</h2>
+      <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem' }}>Add a word or phrase</h2>
       
       {status && (
         <div className={`status-msg ${status.type}`}>
@@ -56,7 +57,7 @@ export default function AddWordForm({ onWordAdded }) {
               className="text-input"
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="e.g. Haus or House"
+              placeholder="e.g. Haus, House, or Guten Morgen"
               disabled={loading}
             />
           </div>
@@ -84,7 +85,7 @@ export default function AddWordForm({ onWordAdded }) {
         
         <button type="submit" className="btn-primary" disabled={loading || !text.trim()}>
           {loading ? <Loader2 className="animate-spin" /> : <Plus />}
-          {loading ? 'Translating & Generating Audio...' : 'Add Word'}
+          {loading ? 'Translating & Generating Audio...' : 'Add Entry'}
         </button>
       </form>
 

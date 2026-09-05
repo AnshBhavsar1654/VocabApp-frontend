@@ -1,11 +1,11 @@
 const API_URL = "http://localhost:8000/api";
 
 export const api = {
-  addWord: async (text, source_lang) => {
+  addWord: async (text, source_lang, entry_type = "word") => {
     const res = await fetch(`${API_URL}/words`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, source_lang }),
+      body: JSON.stringify({ text, source_lang, entry_type }),
     });
     if (!res.ok) {
         if (res.status === 409) {
@@ -19,6 +19,16 @@ export const api = {
   getWords: async () => {
     const res = await fetch(`${API_URL}/words`);
     if (!res.ok) throw new Error("Failed to fetch words");
+    return res.json();
+  },
+  
+  updateWord: async (id, data) => {
+    const res = await fetch(`${API_URL}/words/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error("Failed to update word");
     return res.json();
   },
   
