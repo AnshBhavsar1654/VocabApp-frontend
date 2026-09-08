@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { api, playAudioWithBuffer } from '../api';
-import { Volume2, Trash2, Loader2, RefreshCw, Pencil, Check, X, Search } from 'lucide-react';
+import { Volume2, Trash2, Loader2, RefreshCw, Pencil, Check, X, Search, Layers } from 'lucide-react';
 
 export default function WordList() {
   const [words, setWords] = useState([]);
@@ -11,6 +11,8 @@ export default function WordList() {
   const [editGerman, setEditGerman] = useState('');
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const [groups, setGroups] = useState([]);
+  const [groupDropdownWordId, setGroupDropdownWordId] = useState(null);
 
   const fetchWords = async () => {
     setLoading(true);
@@ -25,8 +27,18 @@ export default function WordList() {
     }
   };
 
+  const fetchGroups = async () => {
+    try {
+      const data = await api.getGroups();
+      setGroups(data);
+    } catch (err) {
+      console.error('Failed to fetch groups', err);
+    }
+  };
+
   useEffect(() => {
     fetchWords();
+    fetchGroups();
   }, []);
 
   const filtered = useMemo(() => {
@@ -77,6 +89,38 @@ export default function WordList() {
 
   const playAudio = (url) => {
     playAudioWithBuffer(url);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = () => setGroupDropdownWordId(null);
+    if (groupDropdownWordId) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [groupDropdownWordId]);
+
+  const toggleGroup = async (wordId, groupId) => {
+    const word = words.find(w => w.id === wordId);
+    if (!word) return;
+    const isInGroup = word.groups.some(g => g.id === groupId);
+    try {
+      if (isInGroup) {
+        await api.removeWordFromGroup(groupId, wordId);
+      } else {
+        await api.addWordsToGroup(groupId, [wordId]);
+      }
+      setWords(prev => prev.map(w => {
+        if (w.id !== wordId) return w;
+        if (isInGroup) {
+          return { ...w, groups: w.groups.filter(g => g.id !== groupId) };
+        } else {
+          const group = groups.find(g => g.id === groupId);
+          return { ...w, groups: [...w.groups, { id: groupId, name: group.name }] };
+        }
+      }));
+    } catch (err) {
+      alert('Failed to update groups: ' + err.message);
+    }
   };
 
   if (loading && words.length === 0) {
@@ -181,7 +225,40 @@ export default function WordList() {
                   <span className="word-separator">↔</span>
                   <span className="word-lang german">{word.german_word}</span>
                 </div>
+                {word.groups && word.groups.length > 0 && (
+                  <div className="word-group-badges">
+                    {word.groups.map(g => (
+                      <span key={g.id} className="group-badge">{g.name}</span>
+                    ))}
+                  </div>
+                )}
                 <div className="word-actions">
+                  <div className="group-dropdown-wrapper">
+                    <button
+                      className="btn-icon"
+                      onClick={() => setGroupDropdownWordId(groupDropdownWordId === word.id ? null : word.id)}
+                      title="Manage groups"
+                    >
+                      <Layers size={18} />
+                    </button>
+                    {groupDropdownWordId === word.id && (
+                      <div className="group-dropdown" onClick={(e) => e.stopPropagation()}>
+                        {groups.map(g => {
+                          const inGroup = word.groups?.some(wg => wg.id === g.id);
+                          return (
+                            <label key={g.id} className="group-dropdown-item">
+                              <input
+                                type="checkbox"
+                                checked={inGroup}
+                                onChange={() => toggleGroup(word.id, g.id)}
+                              />
+                              <span>{g.name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                   <button className="btn-icon" onClick={() => playAudio(word.audio_url)} title="Play Audio">
                     <Volume2 size={18} />
                   </button>

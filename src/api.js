@@ -56,7 +56,64 @@ export const api = {
     });
     if (!res.ok) throw new Error("Failed to check answer");
     return res.json();
-  }
+  },
+
+  getGroups: async () => {
+    const res = await fetch(`${API_URL}/groups`);
+    if (!res.ok) throw new Error("Failed to fetch groups");
+    return res.json();
+  },
+
+  createGroup: async (name) => {
+    const res = await fetch(`${API_URL}/groups`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) {
+      if (res.status === 409) throw new Error("Group with this name already exists.");
+      throw new Error("Failed to create group.");
+    }
+    return res.json();
+  },
+
+  renameGroup: async (id, name) => {
+    const res = await fetch(`${API_URL}/groups/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) throw new Error("Failed to rename group");
+    return res.json();
+  },
+
+  deleteGroup: async (id) => {
+    const res = await fetch(`${API_URL}/groups/${id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error("Failed to delete group");
+  },
+
+  getGroupWords: async (id) => {
+    const res = await fetch(`${API_URL}/groups/${id}/words`);
+    if (!res.ok) throw new Error("Failed to fetch group words");
+    return res.json();
+  },
+
+  addWordsToGroup: async (groupId, wordIds) => {
+    const res = await fetch(`${API_URL}/groups/${groupId}/words`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ word_ids: wordIds }),
+    });
+    if (!res.ok) throw new Error("Failed to add words to group");
+    return res.json();
+  },
+
+  removeWordFromGroup: async (groupId, wordId) => {
+    const res = await fetch(`${API_URL}/groups/${groupId}/words/${wordId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error("Failed to remove word from group");
+  },
 };
 
 export const playAudioWithBuffer = (url) => {

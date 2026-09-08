@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import AddWordForm from './components/AddWordForm';
 import WordList from './components/WordList';
 import Quiz from './components/Quiz';
+import Groups from './components/Groups';
+import { Layers } from 'lucide-react';
 
 function App() {
-  const [activeTab, setActiveTab] = useState('add'); // 'add', 'list', 'quiz'
+  const [activeTab, setActiveTab] = useState('add'); // 'add', 'list', 'groups', 'quiz'
 
   return (
     <div className="app-container">
@@ -27,6 +29,13 @@ function App() {
           My Words
         </button>
         <button 
+          className={`nav-tab ${activeTab === 'groups' ? 'active' : ''}`}
+          onClick={() => setActiveTab('groups')}
+        >
+          <Layers size={16} style={{ marginRight: '0.35rem' }} />
+          Groups
+        </button>
+        <button 
           className={`nav-tab ${activeTab === 'quiz' ? 'active' : ''}`}
           onClick={() => setActiveTab('quiz')}
         >
@@ -37,6 +46,7 @@ function App() {
       <main>
         {activeTab === 'add' && <AddWordForm />}
         {activeTab === 'list' && <WordList />}
+        {activeTab === 'groups' && <Groups />}
         {activeTab === 'quiz' && <Quiz />}
       </main>
     </div>
