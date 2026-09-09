@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { motion, useReducedMotion } from 'framer-motion';
 import { api, playAudioWithBuffer } from '../api';
-import { Plus, Volume2, Loader2, Languages } from 'lucide-react';
+import { Plus, Volume2, Loader2, Languages, Sparkles } from 'lucide-react';
 
 export default function AddWordForm() {
   const [text, setText] = useState('');
   const [sourceLang, setSourceLang] = useState('en');
   const [lastAdded, setLastAdded] = useState(null);
   const queryClient = useQueryClient();
+  const shouldReduce = useReducedMotion();
 
   const addMutation = useMutation({
     mutationFn: ({ text: t, sourceLang: sl, entryType }) => api.addWord(t, sl, entryType),
     onSuccess: (word) => {
-      // Production pattern: invalidate so all consumers (['words'], ['groups'], ['groupWords',*]) get fresh data.
-      // We invalidate ['words'] and ['groups'] — groupWords will refetch on next mount/visibility.
       queryClient.invalidateQueries({ queryKey: ['words'] });
       queryClient.invalidateQueries({ queryKey: ['groups'] });
       setLastAdded(word);
@@ -21,60 +21,47 @@ export default function AddWordForm() {
     },
   });
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     if (!text.trim()) return;
     const entryType = text.trim().includes(' ') ? 'phrase' : 'word';
     addMutation.mutate({ text, sourceLang, entryType });
   };
 
-  const playAudio = (url) => {
-    playAudioWithBuffer(url);
-  };
-
   const loading = addMutation.isPending;
   const status = addMutation.isError
     ? { type: 'error', msg: addMutation.error?.message || 'Failed to add word.' }
-    : addMutation.isSuccess && !lastAdded
+    : lastAdded
       ? { type: 'success', msg: 'Added successfully!' }
-      : lastAdded
-        ? { type: 'success', msg: 'Added successfully!' }
-        : null;
+      : null;
+
+  const pendingAudio = lastAdded && !lastAdded.audio_url;
 
   return (
-    <div className="card">
-      <h2>Add a word or phrase</h2>
-      <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.35rem', marginBottom: '1.5rem' }}>
-        Type a word or sentence in English or German.
+    <motion.div className="card" initial={shouldReduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
+      <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Sparkles size={18} style={{ color: 'var(--color-accent)' }} /> Add a word or phrase</h2>
+      <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginTop: '0.3rem', marginBottom: '1.25rem' }}>
+        Type in English or German — ä ö ü ß supported. We'll translate and create audio.
       </p>
 
-      {status && (
-        <div className={`status-msg ${status.type}`}>
-          {status.msg}
-        </div>
-      )}
+      {status && <div className={`status-msg ${status.type}`}>{status.msg}</div>}
 
       <form onSubmit={handleSubmit}>
-        <div className="input-group" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <div className="input-group" style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 200px' }}>
-            <label className="input-label" htmlFor="word-input">
-              Word or Phrase
-            </label>
+            <label className="input-label" htmlFor="word-input">Word or Phrase</label>
             <input
               id="word-input"
               type="text"
               className="text-input"
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="e.g. Haus, House, or Guten Morgen"
+              placeholder="e.g. Bahnhof, Gemütlichkeit"
               disabled={loading}
             />
           </div>
-
-          <div style={{ flex: '0 0 auto', minWidth: '130px' }}>
-            <label className="input-label" htmlFor="lang-select">
-              Language
-            </label>
+          <div style={{ flex: '0 0 130px' }}>
+            <label className="input-label" htmlFor="lang-select">Language</label>
             <div style={{ position: 'relative' }}>
               <select
                 id="lang-select"
@@ -82,35 +69,40 @@ export default function AddWordForm() {
                 value={sourceLang}
                 onChange={(e) => setSourceLang(e.target.value)}
                 disabled={loading}
-                style={{ appearance: 'none', paddingLeft: '2.25rem' }}
+                style={{ paddingLeft: '2.2rem' }}
               >
                 <option value="en">English</option>
                 <option value="de">German</option>
               </select>
-              <Languages size={16} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
+              <Languages size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-faint)', pointerEvents: 'none' }} />
             </div>
           </div>
         </div>
 
         <button type="submit" className="btn-primary" disabled={loading || !text.trim()}>
           {loading ? <Loader2 className="animate-spin" size={18} /> : <Plus size={18} />}
-          {loading ? 'Translating & Generating Audio...' : 'Add Entry'}
+          {loading ? 'Translating…' : 'Add Entry'}
         </button>
       </form>
 
       {lastAdded && (
-        <div className="recently-added">
+        <motion.div className="recently-added" initial={shouldReduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
           <h3>Recently Added</h3>
-          <div className="word-item-content">
-            <span className="word-lang">{lastAdded.english_word}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700 }}>{lastAdded.english_word}</span>
             <span className="word-separator">↔</span>
-            <span className="word-lang german">{lastAdded.german_word}</span>
-            <button className="btn-icon" onClick={() => playAudio(lastAdded.audio_url)} title="Play Audio">
-              <Volume2 size={20} />
-            </button>
+            <span style={{ fontWeight: 700, color: 'var(--color-primary-strong)' }}>{lastAdded.german_word}</span>
+            {pendingAudio ? (
+              <span className="pending-pill"><Loader2 size={12} className="animate-spin" /> generating audio…</span>
+            ) : (
+              <button className="btn-icon" onClick={() => playAudioWithBuffer(lastAdded.audio_url)} title="Play audio" style={{ width: 36, height: 36 }}>
+                <Volume2 size={18} />
+              </button>
+            )}
           </div>
-        </div>
+          {pendingAudio && <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '0.4rem' }}>Audio will appear in My Words shortly — polling every few seconds.</p>}
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 }
