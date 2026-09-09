@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, playAudioWithBuffer } from '../api';
 import {
   Layers, Plus, Trash2, Pencil, Check, X, Volume2,
@@ -6,75 +7,57 @@ import {
 } from 'lucide-react';
 
 export default function Groups() {
-  const [groups, setGroups] = useState([]);
+  const queryClient = useQueryClient();
   const [selectedGroupId, setSelectedGroupId] = useState(null);
-  const [groupWords, setGroupWords] = useState([]);
-  const [allWords, setAllWords] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [groupLoading, setGroupLoading] = useState(false);
-  const [error, setError] = useState(null);
 
   const [newGroupName, setNewGroupName] = useState('');
-  const [creating, setCreating] = useState(false);
-
   const [editingGroupId, setEditingGroupId] = useState(null);
   const [editingName, setEditingName] = useState('');
-  const [renaming, setRenaming] = useState(false);
 
   const [showAddWords, setShowAddWords] = useState(false);
   const [addWordsSearch, setAddWordsSearch] = useState('');
-  const [addingWords, setAddingWords] = useState(false);
 
-  const fetchGroups = async () => {
-    setLoading(true);
-    try {
-      const data = await api.getGroups();
-      setGroups(data);
-      if (!selectedGroupId && data.length > 0) {
-        setSelectedGroupId(data[0].id);
-      }
-      setError(null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+  // ['groups'] and ['words'] are stable keys with 60s staleTime — tab switches use cache instantly.
+  const {
+    data: groups = [],
+    isLoading,
+    isFetching: groupsFetching,
+    error: groupsError,
+  } = useQuery({
+    queryKey: ['groups'],
+    queryFn: api.getGroups,
+    staleTime: 60_000,
+  });
+
+  // Reuse already-cached ['words'] query — no separate fetch in modal.
+  const { data: allWords = [] } = useQuery({
+    queryKey: ['words'],
+    queryFn: api.getWords,
+    staleTime: 60_000,
+  });
+
+  const {
+    data: groupWordsData,
+    isLoading: groupLoading,
+    isFetching: groupFetching,
+  } = useQuery({
+    queryKey: ['groupWords', selectedGroupId],
+    queryFn: () => api.getGroupWords(selectedGroupId),
+    enabled: !!selectedGroupId,
+    staleTime: 60_000,
+  });
+
+  const groupWords = groupWordsData?.words || [];
+
+  // Auto-select first group once groups load (mirrors old fetchGroups logic)
+  React.useEffect(() => {
+    if (!selectedGroupId && groups.length > 0) {
+      setSelectedGroupId(groups[0].id);
     }
-  };
-
-  const fetchGroupWords = async (groupId) => {
-    if (!groupId) return;
-    setGroupLoading(true);
-    try {
-      const data = await api.getGroupWords(groupId);
-      setGroupWords(data.words || []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setGroupLoading(false);
-    }
-  };
-
-  const fetchAllWords = async () => {
-    try {
-      const data = await api.getWords();
-      setAllWords(data);
-    } catch (err) {
-      console.error('Failed to fetch words', err);
-    }
-  };
-
-  useEffect(() => {
-    fetchGroups();
-    fetchAllWords();
-  }, []);
-
-  useEffect(() => {
-    if (selectedGroupId) {
-      fetchGroupWords(selectedGroupId);
-    }
-  }, [selectedGroupId]);
+  }, [groups, selectedGroupId]);
 
   const selectedGroup = groups.find(g => g.id === selectedGroupId);
+  const error = groupsError?.message || null;
 
   const wordsNotInGroup = useMemo(() => {
     const inGroupIds = new Set(groupWords.map(w => w.id));
@@ -86,86 +69,104 @@ export default function Groups() {
     );
   }, [allWords, groupWords, addWordsSearch]);
 
-  const handleCreateGroup = async () => {
+  const createGroupMutation = useMutation({
+    mutationFn: (name) => api.createGroup(name),
+    onSuccess: (group) => {
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      setNewGroupName('');
+      setSelectedGroupId(group.id);
+    },
+  });
+
+  const renameGroupMutation = useMutation({
+    mutationFn: ({ groupId, name }) => api.renameGroup(groupId, name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      setEditingGroupId(null);
+    },
+  });
+
+  const deleteGroupMutation = useMutation({
+    mutationFn: (groupId) => api.deleteGroup(groupId),
+    onSuccess: (_, groupId) => {
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      queryClient.invalidateQueries({ queryKey: ['groupWords'] });
+      if (selectedGroupId === groupId) {
+        const defaultGroup = groups.find(g => g.is_default);
+        setSelectedGroupId(defaultGroup ? defaultGroup.id : null);
+      }
+    },
+  });
+
+  const addWordsMutation = useMutation({
+    mutationFn: ({ groupId, wordIds }) => api.addWordsToGroup(groupId, wordIds),
+    onSuccess: (_, { groupId }) => {
+      queryClient.invalidateQueries({ queryKey: ['groupWords', groupId] });
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      queryClient.invalidateQueries({ queryKey: ['words'] });
+      setShowAddWords(false);
+      setAddWordsSearch('');
+    },
+  });
+
+  const removeWordMutation = useMutation({
+    mutationFn: ({ groupId, wordId }) => api.removeWordFromGroup(groupId, wordId),
+    onSuccess: (_, { groupId }) => {
+      queryClient.invalidateQueries({ queryKey: ['groupWords', groupId] });
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      queryClient.invalidateQueries({ queryKey: ['words'] });
+    },
+  });
+
+  const handleCreateGroup = () => {
     const name = newGroupName.trim();
     if (!name) {
       alert('Please enter a group name.');
       return;
     }
-    setCreating(true);
-    try {
-      const group = await api.createGroup(name);
-      setGroups(prev => [...prev, group]);
-      setNewGroupName('');
-      setSelectedGroupId(group.id);
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      setCreating(false);
-    }
+    createGroupMutation.mutate(name, {
+      onError: (err) => alert(err.message),
+    });
   };
 
-  const handleRenameGroup = async (groupId) => {
+  const handleRenameGroup = (groupId) => {
     const name = editingName.trim();
     if (!name) return;
-    setRenaming(true);
-    try {
-      const updated = await api.renameGroup(groupId, name);
-      setGroups(prev => prev.map(g => g.id === groupId ? { ...g, name: updated.name } : g));
-      setEditingGroupId(null);
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      setRenaming(false);
-    }
+    renameGroupMutation.mutate(
+      { groupId, name },
+      { onError: (err) => alert(err.message) }
+    );
   };
 
-  const handleDeleteGroup = async (groupId) => {
+  const handleDeleteGroup = (groupId) => {
     if (!confirm('Delete this group? Words will be moved to Ungrouped.')) return;
-    try {
-      await api.deleteGroup(groupId);
-      setGroups(prev => prev.filter(g => g.id !== groupId));
-      if (selectedGroupId === groupId) {
-        const defaultGroup = groups.find(g => g.is_default);
-        setSelectedGroupId(defaultGroup ? defaultGroup.id : null);
-      }
-    } catch (err) {
-      alert(err.message);
-    }
+    deleteGroupMutation.mutate(groupId, {
+      onError: (err) => alert(err.message),
+    });
   };
 
-  const handleAddWords = async (wordIds) => {
+  const handleAddWords = (wordIds) => {
     if (!selectedGroupId || wordIds.length === 0) return;
-    setAddingWords(true);
-    try {
-      await api.addWordsToGroup(selectedGroupId, wordIds);
-      await fetchGroupWords(selectedGroupId);
-      await fetchGroups();
-      setShowAddWords(false);
-      setAddWordsSearch('');
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      setAddingWords(false);
-    }
+    addWordsMutation.mutate(
+      { groupId: selectedGroupId, wordIds },
+      { onError: (err) => alert(err.message) }
+    );
   };
 
-  const handleRemoveWord = async (wordId) => {
+  const handleRemoveWord = (wordId) => {
     if (!selectedGroupId) return;
-    try {
-      await api.removeWordFromGroup(selectedGroupId, wordId);
-      setGroupWords(prev => prev.filter(w => w.id !== wordId));
-      await fetchGroups();
-    } catch (err) {
-      alert(err.message);
-    }
+    removeWordMutation.mutate(
+      { groupId: selectedGroupId, wordId },
+      { onError: (err) => alert(err.message) }
+    );
   };
 
   const playAudio = (url) => {
     playAudioWithBuffer(url);
   };
 
-  if (loading) {
+  // isLoading = true only on first load (no cache) → full skeleton
+  if (isLoading) {
     return (
       <div className="card">
         {[1, 2, 3].map(i => (
@@ -183,7 +184,10 @@ export default function Groups() {
       {/* Sidebar - Group List */}
       <div className="groups-sidebar card">
         <div className="groups-sidebar-header">
-          <h2>Groups</h2>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            Groups
+            {groupsFetching && !isLoading && <Loader2 size={14} className="animate-spin" style={{ color: 'var(--text-secondary)' }} />}
+          </h2>
         </div>
 
         <div className="group-create">
@@ -194,17 +198,17 @@ export default function Groups() {
             value={newGroupName}
             onChange={(e) => setNewGroupName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreateGroup()}
-            disabled={creating}
+            disabled={createGroupMutation.isPending}
             style={{ fontSize: '0.85rem', padding: '0.6rem 0.75rem' }}
           />
           <button
             className="btn-icon"
             onClick={handleCreateGroup}
-            disabled={creating}
+            disabled={createGroupMutation.isPending}
             title="Create group"
             style={{ color: 'var(--success-color)', minWidth: 36, minHeight: 36 }}
           >
-            {creating ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+            {createGroupMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
           </button>
         </div>
 
@@ -230,21 +234,21 @@ export default function Groups() {
                     }}
                     onClick={(e) => e.stopPropagation()}
                     autoFocus
-                    disabled={renaming}
+                    disabled={renameGroupMutation.isPending}
                     style={{ fontSize: '0.85rem', padding: '0.35rem 0.5rem', flex: 1 }}
                   />
                   <button
                     className="btn-icon"
                     onClick={(e) => { e.stopPropagation(); handleRenameGroup(group.id); }}
-                    disabled={renaming}
+                    disabled={renameGroupMutation.isPending}
                     style={{ color: 'var(--success-color)', minWidth: 28, minHeight: 28 }}
                   >
-                    {renaming ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                    {renameGroupMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                   </button>
                   <button
                     className="btn-icon"
                     onClick={(e) => { e.stopPropagation(); setEditingGroupId(null); }}
-                    disabled={renaming}
+                    disabled={renameGroupMutation.isPending}
                     style={{ minWidth: 28, minHeight: 28 }}
                   >
                     <X size={14} />
@@ -297,10 +301,11 @@ export default function Groups() {
                 {selectedGroup.is_default ? <FolderOpen size={20} /> : <Layers size={20} />}
                 {selectedGroup.name}
                 <span className="groups-panel-count">({groupWords.length})</span>
+                {groupFetching && !groupLoading && <Loader2 size={14} className="animate-spin" style={{ marginLeft: '0.4rem', color: 'var(--text-secondary)' }} />}
               </h2>
               <button
                 className="btn-primary-style btn-sm"
-                onClick={() => { setShowAddWords(true); fetchAllWords(); }}
+                onClick={() => setShowAddWords(true)}
               >
                 <Plus size={16} />
                 Add Words
@@ -337,6 +342,7 @@ export default function Groups() {
                           className="btn-icon danger"
                           onClick={() => handleRemoveWord(word.id)}
                           title="Remove from group"
+                          disabled={removeWordMutation.isPending}
                         >
                           <X size={18} />
                         </button>
@@ -357,7 +363,7 @@ export default function Groups() {
         )}
       </div>
 
-      {/* Add Words Modal */}
+      {/* Add Words Modal — reads from already-cached ['words'], no separate fetch */}
       {showAddWords && (
         <div className="modal-overlay" onClick={() => setShowAddWords(false)}>
           <div className="modal-content card" onClick={(e) => e.stopPropagation()}>
@@ -396,11 +402,11 @@ export default function Groups() {
                     <button
                       className="btn-icon"
                       onClick={() => handleAddWords([word.id])}
-                      disabled={addingWords}
+                      disabled={addWordsMutation.isPending}
                       title="Add to group"
                       style={{ color: 'var(--success-color)' }}
                     >
-                      {addingWords ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+                      {addWordsMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
                     </button>
                   </div>
                 ))
@@ -411,10 +417,10 @@ export default function Groups() {
               <button
                 className="btn-primary-style"
                 onClick={() => handleAddWords(wordsNotInGroup.map(w => w.id))}
-                disabled={addingWords}
+                disabled={addWordsMutation.isPending}
                 style={{ marginTop: '1rem' }}
               >
-                {addingWords ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                {addWordsMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
                 Add All ({wordsNotInGroup.length})
               </button>
             )}

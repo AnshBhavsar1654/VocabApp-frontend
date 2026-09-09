@@ -1,59 +1,58 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { api, playAudioWithBuffer } from '../api';
 import { Volume2, Loader2, ArrowRight, CheckCircle, XCircle } from 'lucide-react';
 
 export default function Quiz() {
-  const [question, setQuestion] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
   const [answer, setAnswer] = useState('');
-  const [checking, setChecking] = useState(false);
   const [result, setResult] = useState(null);
 
-  const loadNext = async () => {
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    setAnswer('');
+  // Quiz is random — staleTime:0 so it always refetches a fresh question when needed.
+  // But we still benefit from caching the *current* question on tab switch (data stays visible).
+  const {
+    data: question,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['quizNext'],
+    queryFn: api.getQuizNext,
+    staleTime: 0,
+    gcTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
 
-    try {
-      const data = await api.getQuizNext();
-      setQuestion(data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadNext();
-  }, []);
-
-  const handleCheck = async (e) => {
-    e.preventDefault();
-    if (!answer.trim()) return;
-
-    setChecking(true);
-    try {
-      const res = await api.checkQuiz(question.id, question.prompt_lang, answer);
+  const checkMutation = useMutation({
+    mutationFn: ({ id, prompt_lang, user_answer }) => api.checkQuiz(id, prompt_lang, user_answer),
+    onSuccess: (res) => {
       setResult(res);
       if (res.correct) {
         playAudioWithBuffer(res.audio_url);
       }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setChecking(false);
-    }
+    },
+  });
+
+  const loadNext = async () => {
+    setResult(null);
+    setAnswer('');
+    await refetch();
+  };
+
+  const handleCheck = async (e) => {
+    e.preventDefault();
+    if (!answer.trim() || !question) return;
+    checkMutation.mutate(
+      { id: question.id, prompt_lang: question.prompt_lang, user_answer: answer }
+    );
   };
 
   const playAudio = (url) => {
     playAudioWithBuffer(url);
   };
 
-  if (loading) {
+  // isLoading = true only on first load (no cache) → full skeleton
+  if (isLoading) {
     return (
       <div className="card">
         <div className="skeleton" style={{ height: '1rem', width: '40%', margin: '0 auto 1rem' }} />
@@ -67,15 +66,23 @@ export default function Quiz() {
   if (error && !question) {
     return (
       <div className="card">
-        <div className="status-msg error">{error}</div>
+        <div className="status-msg error">{error.message}</div>
         <button onClick={loadNext} className="btn-primary" style={{ marginTop: '1rem' }}>Try Again</button>
       </div>
     );
   }
 
+  // isFetching with cached data → keep question visible + small indicator
+  const showUpdating = isFetching && !!question && !isLoading;
+
   return (
     <div className="card">
       <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+        {showUpdating && (
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.5rem' }}>
+            <Loader2 size={12} className="animate-spin" /> updating…
+          </span>
+        )}
         <p style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 500, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           Translate this to {question.prompt_lang === 'de' ? 'English' : 'German'}
         </p>
@@ -87,6 +94,10 @@ export default function Quiz() {
         </button>
       </div>
 
+      {checkMutation.error && !result && (
+        <div className="status-msg error" style={{ marginBottom: '1rem' }}>{checkMutation.error.message}</div>
+      )}
+
       {!result ? (
         <form onSubmit={handleCheck}>
           <div className="input-group">
@@ -97,15 +108,15 @@ export default function Quiz() {
               onChange={(e) => setAnswer(e.target.value)}
               placeholder="Type your translation..."
               autoFocus
-              disabled={checking}
+              disabled={checkMutation.isPending}
               autoComplete="off"
               autoCapitalize="off"
               autoCorrect="off"
               spellCheck="false"
             />
           </div>
-          <button type="submit" className="btn-primary" disabled={checking || !answer.trim()}>
-            {checking ? <Loader2 className="animate-spin" size={18} /> : <ArrowRight size={18} />}
+          <button type="submit" className="btn-primary" disabled={checkMutation.isPending || !answer.trim()}>
+            {checkMutation.isPending ? <Loader2 className="animate-spin" size={18} /> : <ArrowRight size={18} />}
             Check Answer
           </button>
         </form>

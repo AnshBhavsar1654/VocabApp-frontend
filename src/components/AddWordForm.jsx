@@ -1,38 +1,45 @@
 import React, { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, playAudioWithBuffer } from '../api';
 import { Plus, Volume2, Loader2, Languages } from 'lucide-react';
 
 export default function AddWordForm() {
   const [text, setText] = useState('');
   const [sourceLang, setSourceLang] = useState('en');
-  const [status, setStatus] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [lastAdded, setLastAdded] = useState(null);
+  const queryClient = useQueryClient();
+
+  const addMutation = useMutation({
+    mutationFn: ({ text: t, sourceLang: sl, entryType }) => api.addWord(t, sl, entryType),
+    onSuccess: (word) => {
+      // Production pattern: invalidate so all consumers (['words'], ['groups'], ['groupWords',*]) get fresh data.
+      // We invalidate ['words'] and ['groups'] — groupWords will refetch on next mount/visibility.
+      queryClient.invalidateQueries({ queryKey: ['words'] });
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      setLastAdded(word);
+      setText('');
+    },
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!text.trim()) return;
-
-    setLoading(true);
-    setStatus(null);
-    setLastAdded(null);
-
-    try {
-      const entryType = text.trim().includes(' ') ? 'phrase' : 'word';
-      const word = await api.addWord(text, sourceLang, entryType);
-      setStatus({ type: 'success', msg: 'Added successfully!' });
-      setLastAdded(word);
-      setText('');
-    } catch (err) {
-      setStatus({ type: 'error', msg: err.message });
-    } finally {
-      setLoading(false);
-    }
+    const entryType = text.trim().includes(' ') ? 'phrase' : 'word';
+    addMutation.mutate({ text, sourceLang, entryType });
   };
 
   const playAudio = (url) => {
     playAudioWithBuffer(url);
   };
+
+  const loading = addMutation.isPending;
+  const status = addMutation.isError
+    ? { type: 'error', msg: addMutation.error?.message || 'Failed to add word.' }
+    : addMutation.isSuccess && !lastAdded
+      ? { type: 'success', msg: 'Added successfully!' }
+      : lastAdded
+        ? { type: 'success', msg: 'Added successfully!' }
+        : null;
 
   return (
     <div className="card">

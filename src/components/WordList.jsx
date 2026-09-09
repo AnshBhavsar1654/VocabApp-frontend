@@ -1,45 +1,70 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, playAudioWithBuffer } from '../api';
 import { Volume2, Trash2, Loader2, RefreshCw, Pencil, Check, X, Search, Layers } from 'lucide-react';
 
 export default function WordList() {
-  const [words, setWords] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState(null);
   const [editEnglish, setEditEnglish] = useState('');
   const [editGerman, setEditGerman] = useState('');
-  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
-  const [groups, setGroups] = useState([]);
   const [groupDropdownWordId, setGroupDropdownWordId] = useState(null);
 
-  const fetchWords = async () => {
-    setLoading(true);
-    try {
-      const data = await api.getWords();
-      setWords(data);
-      setError(null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Stable keys: ['words'] and ['groups'] with 60s staleTime => instant cache on tab switch, quiet revalidation.
+  const {
+    data: words = [],
+    isLoading,
+    isFetching,
+    error: queryError,
+    refetch,
+  } = useQuery({
+    queryKey: ['words'],
+    queryFn: api.getWords,
+    staleTime: 60_000,
+  });
 
-  const fetchGroups = async () => {
-    try {
-      const data = await api.getGroups();
-      setGroups(data);
-    } catch (err) {
-      console.error('Failed to fetch groups', err);
-    }
-  };
+  const { data: groups = [] } = useQuery({
+    queryKey: ['groups'],
+    queryFn: api.getGroups,
+    staleTime: 60_000,
+  });
 
-  useEffect(() => {
-    fetchWords();
-    fetchGroups();
-  }, []);
+  const error = queryError?.message || null;
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => api.deleteWord(id),
+    onSuccess: (_, id) => {
+      // Production default: invalidateQueries so Supabase is source of truth.
+      // Optimistic alternative: remove from cache immediately in onMutate, rollback onError.
+      queryClient.invalidateQueries({ queryKey: ['words'] });
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      queryClient.invalidateQueries({ queryKey: ['groupWords'] });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => api.updateWord(id, data),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['words'] });
+      // Also keep groupWords fresh if the word appears in any group detail
+      queryClient.invalidateQueries({ queryKey: ['groupWords'] });
+      setEditingId(null);
+    },
+  });
+
+  const toggleGroupMutation = useMutation({
+    mutationFn: ({ wordId, groupId, isInGroup }) => {
+      if (isInGroup) return api.removeWordFromGroup(groupId, wordId);
+      return api.addWordsToGroup(groupId, [wordId]);
+    },
+    onSuccess: (_, { groupId }) => {
+      queryClient.invalidateQueries({ queryKey: ['words'] });
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      queryClient.invalidateQueries({ queryKey: ['groupWords', groupId] });
+      queryClient.invalidateQueries({ queryKey: ['groupWords'] });
+    },
+  });
 
   const filtered = useMemo(() => {
     if (!search.trim()) return words;
@@ -49,13 +74,10 @@ export default function WordList() {
     );
   }, [words, search]);
 
-  const handleDelete = async (id) => {
-    try {
-      await api.deleteWord(id);
-      setWords(words.filter(w => w.id !== id));
-    } catch (err) {
-      alert("Failed to delete word: " + err.message);
-    }
+  const handleDelete = (id) => {
+    deleteMutation.mutate(id, {
+      onError: (err) => alert('Failed to delete word: ' + err.message),
+    });
   };
 
   const startEdit = (word) => {
@@ -70,28 +92,21 @@ export default function WordList() {
     setEditGerman('');
   };
 
-  const saveEdit = async (id) => {
+  const saveEdit = (id) => {
     if (!editEnglish.trim() || !editGerman.trim()) return;
-    setSaving(true);
-    try {
-      const updated = await api.updateWord(id, {
-        english_word: editEnglish.trim(),
-        german_word: editGerman.trim(),
-      });
-      setWords(words.map(w => w.id === id ? updated : w));
-      setEditingId(null);
-    } catch (err) {
-      alert("Failed to update: " + err.message);
-    } finally {
-      setSaving(false);
-    }
+    updateMutation.mutate(
+      { id, data: { english_word: editEnglish.trim(), german_word: editGerman.trim() } },
+      {
+        onError: (err) => alert('Failed to update: ' + err.message),
+      }
+    );
   };
 
   const playAudio = (url) => {
     playAudioWithBuffer(url);
   };
 
-  useEffect(() => {
+  React.useEffect(() => {
     const handleClickOutside = () => setGroupDropdownWordId(null);
     if (groupDropdownWordId) {
       document.addEventListener('click', handleClickOutside);
@@ -99,31 +114,20 @@ export default function WordList() {
     }
   }, [groupDropdownWordId]);
 
-  const toggleGroup = async (wordId, groupId) => {
+  const toggleGroup = (wordId, groupId) => {
     const word = words.find(w => w.id === wordId);
     if (!word) return;
     const isInGroup = word.groups.some(g => g.id === groupId);
-    try {
-      if (isInGroup) {
-        await api.removeWordFromGroup(groupId, wordId);
-      } else {
-        await api.addWordsToGroup(groupId, [wordId]);
+    toggleGroupMutation.mutate(
+      { wordId, groupId, isInGroup },
+      {
+        onError: (err) => alert('Failed to update groups: ' + err.message),
       }
-      setWords(prev => prev.map(w => {
-        if (w.id !== wordId) return w;
-        if (isInGroup) {
-          return { ...w, groups: w.groups.filter(g => g.id !== groupId) };
-        } else {
-          const group = groups.find(g => g.id === groupId);
-          return { ...w, groups: [...w.groups, { id: groupId, name: group.name }] };
-        }
-      }));
-    } catch (err) {
-      alert('Failed to update groups: ' + err.message);
-    }
+    );
   };
 
-  if (loading && words.length === 0) {
+  // isLoading = true only on first load (no cache) → full skeleton
+  if (isLoading) {
     return (
       <div className="card">
         {[1, 2, 3, 4, 5].map(i => (
@@ -141,9 +145,17 @@ export default function WordList() {
   return (
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-        <h2>Your Vocabulary ({words.length})</h2>
-        <button onClick={fetchWords} className="btn-icon" title="Refresh">
-          <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+        <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          Your Vocabulary ({words.length})
+          {/* isFetching = true on every background refetch → small indicator, old data stays visible */}
+          {isFetching && !isLoading && (
+            <span style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: '0.2rem 0.5rem', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+              <Loader2 size={12} className="animate-spin" /> updating…
+            </span>
+          )}
+        </h2>
+        <button onClick={() => refetch()} className="btn-icon" title="Refresh">
+          <RefreshCw size={18} className={isFetching ? "animate-spin" : ""} />
         </button>
       </div>
 
@@ -162,7 +174,7 @@ export default function WordList() {
         </div>
       )}
 
-      {words.length === 0 && !loading && (
+      {words.length === 0 && !isLoading && (
         <div className="empty-state">
           <div className="empty-state-icon">
             <Volume2 size={48} />
@@ -191,7 +203,7 @@ export default function WordList() {
                     onChange={(e) => setEditEnglish(e.target.value)}
                     style={{ flex: '1 1 100px', padding: '0.45rem 0.65rem', fontSize: '0.9rem' }}
                     autoFocus
-                    disabled={saving}
+                    disabled={updateMutation.isPending}
                   />
                   <span className="word-separator">↔</span>
                   <input
@@ -200,7 +212,7 @@ export default function WordList() {
                     value={editGerman}
                     onChange={(e) => setEditGerman(e.target.value)}
                     style={{ flex: '1 1 100px', padding: '0.45rem 0.65rem', fontSize: '0.9rem', color: '#a78bfa' }}
-                    disabled={saving}
+                    disabled={updateMutation.isPending}
                   />
                 </div>
                 <div className="word-actions">
@@ -208,12 +220,12 @@ export default function WordList() {
                     className="btn-icon"
                     onClick={() => saveEdit(word.id)}
                     title="Save"
-                    disabled={saving || !editEnglish.trim() || !editGerman.trim()}
+                    disabled={updateMutation.isPending || !editEnglish.trim() || !editGerman.trim()}
                     style={{ color: 'var(--success-color)' }}
                   >
-                    {saving ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
+                    {updateMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
                   </button>
-                  <button className="btn-icon" onClick={cancelEdit} title="Cancel" disabled={saving}>
+                  <button className="btn-icon" onClick={cancelEdit} title="Cancel" disabled={updateMutation.isPending}>
                     <X size={18} />
                   </button>
                 </div>
@@ -251,6 +263,7 @@ export default function WordList() {
                                 type="checkbox"
                                 checked={inGroup}
                                 onChange={() => toggleGroup(word.id, g.id)}
+                                disabled={toggleGroupMutation.isPending}
                               />
                               <span>{g.name}</span>
                             </label>
@@ -265,7 +278,7 @@ export default function WordList() {
                   <button className="btn-icon" onClick={() => startEdit(word)} title="Edit">
                     <Pencil size={18} />
                   </button>
-                  <button className="btn-icon danger" onClick={() => handleDelete(word.id)} title="Delete">
+                  <button className="btn-icon danger" onClick={() => handleDelete(word.id)} title="Delete" disabled={deleteMutation.isPending}>
                     <Trash2 size={18} />
                   </button>
                 </div>
