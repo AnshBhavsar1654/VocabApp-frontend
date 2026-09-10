@@ -1,4 +1,24 @@
-* { box-sizing: border-box; margin: 0; padding: 0; }
+@import "tailwindcss";
+
+@custom-variant dark (&:is(html[data-theme="dark"] *));
+
+@theme {
+  --font-display: "Nunito", system-ui, sans-serif;
+  --font-body: "Source Sans 3", system-ui, sans-serif;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Base — keep warm paper tokens, now Tailwind-enhanced
+   NOTE: Do not reset margin/padding here — Tailwind's preflight + utilities control spacing.
+   The previous `* { margin:0; padding:0 }` after `@import "tailwindcss"` nulled Tailwind's
+   `mx-auto`/`px-*` utilities (used for centering the 860px column), causing the "corner" bug
+   seen in the screenshot. Keep only box-sizing here. */
+* { box-sizing: border-box; }
 
 html {
   -webkit-text-size-adjust: 100%;
@@ -19,7 +39,11 @@ body {
   line-height: 1.5;
 }
 
-/* ===== App Shell ===== */
+/* ===== Legacy semantic classes — kept as fallback for components not yet inlined
+   New shell (App.jsx) now uses inline Tailwind utilities directly.
+   These remain so WordList/Groups/Quiz/AddWordForm keep visuals while they migrate. ===== */
+
+/* App Shell (fallback) */
 .app-shell {
   min-height: 100vh;
   min-height: 100dvh;
@@ -40,7 +64,7 @@ body {
   display: block;
 }
 
-/* ===== Navbar (top) ===== */
+/* Navbar (fallback) */
 .navbar {
   position: sticky;
   top: 0;
@@ -157,7 +181,7 @@ body {
   html[data-theme="dark"] .bottom-tab.active { color: var(--color-primary); }
 }
 
-/* ===== Stat Strip — 3 tiles ===== */
+/* Stat Strip — 3 tiles */
 .stat-strip { margin-bottom: 1.25rem; }
 .stat-grid {
   display: grid;
@@ -286,7 +310,7 @@ html[data-theme="dark"] .stat-ring-center { color: var(--color-primary); }
 .stat-edit-input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-soft); }
 .btn-icon.small { width: 30px; height: 30px; }
 
-/* ===== Quiz Focus — full-bleed ===== */
+/* Quiz Focus — full-bleed */
 .quiz-stage {
   min-height: 100vh;
   min-height: 100dvh;
@@ -318,7 +342,7 @@ html[data-theme="dark"] .stat-ring-center { color: var(--color-primary); }
   cursor: pointer;
 }
 
-/* ===== Legacy header compat (unused) ===== */
+/* Legacy header compat (unused) */
 .header, .header-top, .streak-strip, .streak-badge, .words-badge, .progress-track, .progress-fill, .nav-tabs, .nav-tab { display: none; }
 
 /* Theme toggle */

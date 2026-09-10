@@ -34,7 +34,7 @@ function ThemeToggle() {
   }, [theme]);
   return (
     <button
-      className="theme-toggle"
+      className="inline-flex items-center justify-center w-11 h-11 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] shrink-0 cursor-pointer transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]"
       onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
       aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
     >
@@ -52,30 +52,43 @@ const NAV_ITEMS = [
 
 function Navbar({ activeTab, setActiveTab }) {
   return (
-    <header className="navbar" role="banner">
-      <div className="navbar-inner">
-        <div className="navbar-brand">
-          <h1 className="navbar-wordmark">
-            Wort<span className="peak">Schatz</span>
+    <header
+      className="sticky top-0 z-20 bg-[var(--color-surface)] border-b border-[var(--color-border)] shadow-[var(--shadow-card)]"
+      role="banner"
+    >
+      <div className="max-w-[860px] mx-auto px-5 py-3 flex items-center gap-4 max-[768px]:px-4 max-[768px]:py-2.5">
+        <div className="shrink-0 min-w-0">
+          <h1 className="font-[var(--font-display)] text-[1.5rem] font-extrabold tracking-[-0.02em] text-[var(--color-text)] leading-none max-[768px]:text-[1.3rem]">
+            Wort<span className="text-[var(--color-primary)]">Schatz</span>
           </h1>
-          <p className="navbar-subtitle">ä ö ü ß ready — one word at a time.</p>
+          <p className="text-[0.72rem] text-[var(--color-text-muted)] mt-[0.15rem] whitespace-nowrap max-[768px]:hidden">
+            ä ö ü ß ready — one word at a time.
+          </p>
         </div>
 
-        <nav className="navbar-nav" aria-label="Primary">
-          {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              className={`nav-item ${activeTab === id ? "active" : ""}`}
-              onClick={() => setActiveTab(id)}
-              aria-current={activeTab === id ? "page" : undefined}
-            >
-              <Icon size={16} />
-              <span>{label}</span>
-            </button>
-          ))}
+        <nav className="flex gap-[0.35rem] flex-1 justify-center max-[768px]:hidden" aria-label="Primary">
+          {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
+            const isActive = activeTab === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                aria-current={isActive ? "page" : undefined}
+                className={[
+                  "inline-flex items-center gap-1.5 px-3.5 py-[0.55rem] rounded-full border font-[var(--font-display)] font-bold text-[0.84rem] cursor-pointer whitespace-nowrap transition-all duration-180",
+                  isActive
+                    ? "bg-[var(--color-primary)] text-[var(--color-primary-contrast)] border-[var(--color-primary-strong)] shadow-[0_1px_6px_rgba(21,148,106,0.25)]"
+                    : "bg-transparent text-[var(--color-text-muted)] border-transparent hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-text)]",
+                ].join(" ")}
+              >
+                <Icon size={16} />
+                <span>{label}</span>
+              </button>
+            );
+          })}
         </nav>
 
-        <div className="navbar-actions">
+        <div className="shrink-0 flex items-center">
           <ThemeToggle />
         </div>
       </div>
@@ -85,18 +98,29 @@ function Navbar({ activeTab, setActiveTab }) {
 
 function BottomTabs({ activeTab, setActiveTab }) {
   return (
-    <nav className="bottom-tabs" aria-label="Primary">
-      {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
-        <button
-          key={id}
-          className={`bottom-tab ${activeTab === id ? "active" : ""}`}
-          onClick={() => setActiveTab(id)}
-          aria-current={activeTab === id ? "page" : undefined}
-        >
-          <Icon size={20} />
-          <span>{label}</span>
-        </button>
-      ))}
+    <nav
+      className="hidden max-[768px]:flex fixed inset-x-0 bottom-0 z-40 bg-[var(--color-surface)] border-t border-[var(--color-border)] shadow-[var(--shadow-sticky)] pt-[0.35rem] pb-[max(0.35rem,env(safe-area-inset-bottom))] px-1 gap-[0.15rem]"
+      aria-label="Primary"
+    >
+      {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
+        const isActive = activeTab === id;
+        return (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id)}
+            aria-current={isActive ? "page" : undefined}
+            className={[
+              "flex-1 flex flex-col items-center gap-[0.15rem] px-1 py-[0.45rem] rounded-[var(--radius-md)] border-t-[3px] font-[var(--font-display)] font-bold text-[0.66rem] cursor-pointer transition-colors",
+              isActive
+                ? "bg-[var(--color-primary-soft)] text-[var(--color-primary-strong)] border-t-[var(--color-primary)] dark:text-[var(--color-primary)]"
+                : "bg-transparent text-[var(--color-text-muted)] border-transparent",
+            ].join(" ")}
+          >
+            <Icon size={20} />
+            <span>{label}</span>
+          </button>
+        );
+      })}
     </nav>
   );
 }
@@ -138,7 +162,6 @@ function StatStrip() {
     };
   }, []);
 
-  // Configurable progress denominator
   const [progressTarget, setProgressTarget] = useState(() => {
     try {
       const raw = localStorage.getItem("vocabapp-progress-target");
@@ -172,66 +195,51 @@ function StatStrip() {
   const targetHint =
     wordCount >= progressTarget ? "Ziel erreicht!" : `${remaining} bis ${progressTarget}`;
 
-  // Ring geometry
   const R = 34;
   const C = 2 * Math.PI * R;
   const dashOffset = C * (1 - progress / 100);
 
   return (
-    <div className="stat-strip">
-      <div className="stat-grid">
+    <div className="mb-5">
+      <div className="grid grid-cols-3 gap-3 max-[640px]:grid-cols-1">
         {/* Streak */}
-        <article className="stat-tile">
-          <div className="stat-tile-icon accent">
+        <article className="relative overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-4 flex items-center gap-[0.9rem] shadow-[var(--shadow-card)] min-h-[96px] max-[640px]:px-[0.85rem]">
+          <div className="w-11 h-11 rounded-[var(--radius-md)] grid place-items-center shrink-0 bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)] border border-[var(--color-accent)]">
             <Flame size={18} />
           </div>
-          <div className="stat-tile-body">
+          <div className="flex flex-col gap-[0.1rem] min-w-0 flex-1">
             <motion.span
               key={streak}
               initial={shouldReduce ? false : { scale: 1.18 }}
               animate={{ scale: 1 }}
               transition={{ duration: 0.22, ease: [0.34, 1.56, 0.64, 1] }}
-              className="stat-number"
+              className="font-[var(--font-display)] text-[1.7rem] font-extrabold leading-none text-[var(--color-text)] tracking-[-0.02em]"
             >
               {streak}
             </motion.span>
-            <span className="stat-label">Tag Streak</span>
-            <span className="stat-sub">Quiz streak</span>
+            <span className="font-[var(--font-display)] font-bold text-[0.78rem] text-[var(--color-text)] uppercase tracking-[0.04em]">Tag Streak</span>
+            <span className="text-[0.78rem] text-[var(--color-text-muted)] font-medium">Quiz streak</span>
           </div>
         </article>
 
         {/* Total Words */}
-        <article className="stat-tile">
-          <div className="stat-tile-icon primary">
+        <article className="relative overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-4 flex items-center gap-[0.9rem] shadow-[var(--shadow-card)] min-h-[96px] max-[640px]:px-[0.85rem]">
+          <div className="w-11 h-11 rounded-[var(--radius-md)] grid place-items-center shrink-0 bg-[var(--color-primary-soft)] text-[var(--color-primary-strong)] border border-[var(--color-primary)] dark:text-[var(--color-primary)]">
             <BookOpen size={18} />
           </div>
-          <div className="stat-tile-body">
-            <span className="stat-number">{wordCount}</span>
-            <span className="stat-label">Wörter</span>
-            <span className="stat-sub">Total words</span>
+          <div className="flex flex-col gap-[0.1rem] min-w-0 flex-1">
+            <span className="font-[var(--font-display)] text-[1.7rem] font-extrabold leading-none text-[var(--color-text)] tracking-[-0.02em]">{wordCount}</span>
+            <span className="font-[var(--font-display)] font-bold text-[0.78rem] text-[var(--color-text)] uppercase tracking-[0.04em]">Wörter</span>
+            <span className="text-[0.78rem] text-[var(--color-text-muted)] font-medium">Total words</span>
           </div>
         </article>
 
         {/* Progress — ring */}
-        <article className="stat-tile stat-tile--progress">
-          <div className="stat-ring-wrap">
-            <svg
-              className="stat-ring"
-              viewBox="0 0 80 80"
-              aria-hidden="true"
-              width={80}
-              height={80}
-            >
-              <circle
-                className="stat-ring-track"
-                cx="40"
-                cy="40"
-                r={R}
-                fill="none"
-                strokeWidth="7"
-              />
+        <article className="relative overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-4 flex items-center gap-[0.9rem] shadow-[var(--shadow-card)] min-h-[96px] max-[640px]:px-[0.85rem]">
+          <div className="relative w-20 h-20 shrink-0">
+            <svg className="block" viewBox="0 0 80 80" aria-hidden="true" width={80} height={80}>
+              <circle cx="40" cy="40" r={R} fill="none" strokeWidth="7" className="stroke-[var(--color-surface-raised)]" />
               <motion.circle
-                className="stat-ring-fill"
                 cx="40"
                 cy="40"
                 r={R}
@@ -241,33 +249,32 @@ function StatStrip() {
                 transform="rotate(-90 40 40)"
                 initial={false}
                 animate={{ strokeDasharray: C, strokeDashoffset: dashOffset }}
-                transition={
-                  shouldReduce ? { duration: 0 } : { duration: 0.5, ease: [0.22, 1, 0.36, 1] }
-                }
+                transition={shouldReduce ? { duration: 0 } : { duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
                 style={{ strokeDasharray: C }}
+                className="stroke-[var(--color-primary)]"
               />
             </svg>
-            <span className="stat-ring-center">{progress}%</span>
+            <span className="absolute inset-0 grid place-items-center font-[var(--font-display)] font-extrabold text-[0.9rem] text-[var(--color-primary-strong)] dark:text-[var(--color-primary)]">{progress}%</span>
           </div>
-          <div className="stat-tile-body">
-            <span className="stat-number small">{wordCount} / {progressTarget}</span>
-            <span className="stat-label">Progress</span>
-            <span className="stat-sub">{targetHint}</span>
+          <div className="flex flex-col gap-[0.1rem] min-w-0 flex-1">
+            <span className="font-[var(--font-display)] text-[1.15rem] font-extrabold leading-none text-[var(--color-text)] tracking-[-0.02em]">{wordCount} / {progressTarget}</span>
+            <span className="font-[var(--font-display)] font-bold text-[0.78rem] text-[var(--color-text)] uppercase tracking-[0.04em]">Progress</span>
+            <span className="text-[0.78rem] text-[var(--color-text-muted)] font-medium">{targetHint}</span>
             {!editingTarget ? (
               <button
-                className="stat-edit-btn"
                 onClick={() => {
                   setDraftTarget(String(progressTarget));
                   setEditingTarget(true);
                 }}
                 title="Change progress target"
+                className="mt-[0.35rem] inline-flex items-center gap-1 bg-[var(--color-surface-raised)] border border-[var(--color-border)] text-[var(--color-text-muted)] px-2 py-1 rounded-full text-[0.72rem] font-bold cursor-pointer w-fit hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]"
               >
                 <Pencil size={12} /> Ziel: {progressTarget}
               </button>
             ) : (
-              <div className="stat-edit-row">
+              <div className="flex items-center gap-1 mt-[0.35rem]">
                 <input
-                  className="stat-edit-input"
+                  className="w-[84px] px-2 py-1 border border-[var(--color-border)] rounded-[var(--radius-sm)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.85rem] font-[var(--font-body)] focus:outline-none focus:border-[var(--color-primary)] focus:shadow-[0_0_0_3px_var(--color-primary-soft)]"
                   type="number"
                   min={1}
                   max={10000}
@@ -279,16 +286,24 @@ function StatStrip() {
                   }}
                   autoFocus
                 />
-                <button className="btn-icon small" onClick={saveTarget} aria-label="Save target">
+                <button
+                  className="inline-flex items-center justify-center w-[30px] h-[30px] rounded-[var(--radius-sm)] bg-[var(--color-surface-raised)] border border-[var(--color-border)] text-[var(--color-text-muted)] cursor-pointer hover:bg-[var(--color-surface-hover)]"
+                  onClick={saveTarget}
+                  aria-label="Save target"
+                >
                   <Check size={14} />
                 </button>
-                <button className="btn-icon small" onClick={cancelTarget} aria-label="Cancel">
+                <button
+                  className="inline-flex items-center justify-center w-[30px] h-[30px] rounded-[var(--radius-sm)] bg-[var(--color-surface-raised)] border border-[var(--color-border)] text-[var(--color-text-muted)] cursor-pointer hover:bg-[var(--color-surface-hover)]"
+                  onClick={cancelTarget}
+                  aria-label="Cancel"
+                >
                   <X size={14} />
                 </button>
               </div>
             )}
           </div>
-          <div className="stat-tile-deco" aria-hidden="true">
+          <div className="absolute right-3 top-3 text-[var(--color-text-faint)] opacity-60" aria-hidden="true">
             <Target size={18} />
           </div>
         </article>
@@ -303,15 +318,15 @@ export default function App() {
 
   if (isQuiz) {
     return (
-      <div className="app-shell quiz-focus">
-        <div className="quiz-stage">
-          <div className="quiz-stage-inner">
-            <div className="quiz-stage-top">
-              <span className="navbar-wordmark small">
-                Wort<span className="peak">Schatz</span>
+      <div className="min-h-screen min-h-[100dvh] bg-[var(--color-bg)]">
+        <div className="min-h-screen min-h-[100dvh] bg-[var(--color-bg)] flex items-start justify-center px-4 py-6">
+          <div className="w-full max-w-[560px]">
+            <div className="flex items-center justify-between mb-4">
+              <span className="font-[var(--font-display)] text-[1.15rem] font-extrabold tracking-[-0.02em] text-[var(--color-text)] leading-none">
+                Wort<span className="text-[var(--color-primary)]">Schatz</span>
               </span>
               <button
-                className="btn-icon"
+                className="inline-flex items-center justify-center w-[38px] h-[38px] rounded-[var(--radius-sm)] bg-[var(--color-surface-raised)] border border-[var(--color-border)] text-[var(--color-text-muted)] cursor-pointer hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]"
                 onClick={() => setActiveTab("add")}
                 title="Exit quiz"
                 aria-label="Exit quiz"
@@ -320,8 +335,11 @@ export default function App() {
               </button>
             </div>
             <Quiz />
-            <div className="quiz-stage-actions">
-              <button className="bottom-tab quiz-exit" onClick={() => setActiveTab("add")}>
+            <div className="flex justify-center mt-4">
+              <button
+                className="bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] px-4 py-2 rounded-full font-[var(--font-display)] font-bold cursor-pointer hover:bg-[var(--color-surface-hover)]"
+                onClick={() => setActiveTab("add")}
+              >
                 ← Back to app
               </button>
             </div>
@@ -332,13 +350,13 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className="min-h-screen min-h-[100dvh] bg-[var(--color-bg)]">
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      <div className="main-column">
+      <div className="max-w-[860px] mx-auto px-5 pt-5 pb-10 w-full max-[768px]:pb-[5.5rem]">
         <StatStrip />
 
-        <main className="content-area">
+        <main className="block">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
