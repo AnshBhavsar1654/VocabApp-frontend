@@ -96,9 +96,9 @@ export default function AddWordForm() {
         <motion.div className="recently-added" initial={shouldReduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
           <h3>Recently Added</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700 }}>{lastAdded.english_word}</span>
+            <span style={{ fontWeight: 700 }}><span className="flag" aria-hidden="true" title="English"><svg viewBox="0 0 60 30" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="60" height="30" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="white" strokeWidth="6"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#C8102E" strokeWidth="4"/><path d="M30 0 V30 M0 15 H60" stroke="white" strokeWidth="10"/><path d="M30 0 V30 M0 15 H60" stroke="#C8102E" strokeWidth="6"/></svg></span> {lastAdded.english_word}</span>
             <span className="word-separator">↔</span>
-            <span style={{ fontWeight: 700, color: 'var(--color-primary-strong)' }}>{lastAdded.german_word}</span>
+            <span style={{ fontWeight: 700, color: 'var(--color-primary-strong)' }}><span className="flag" aria-hidden="true" title="Deutsch"><svg viewBox="0 0 5 3" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg></span> {lastAdded.german_word}</span>
             {pendingAudio ? (
               <span className="pending-pill"><Loader2 size={12} className="animate-spin" /> generating audio…</span>
             ) : audioLoading ? (

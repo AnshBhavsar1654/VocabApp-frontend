@@ -130,8 +130,9 @@ export default function Quiz() {
               placeItems: 'center',
             }}
           >
-            <span style={{ transform: flipped && !shouldReduce ? 'rotateY(180deg)' : 'none', display: 'inline-block' }}>
-              {flipped && result && !result.correct ? result.correct_answer : question.prompt_word}
+            <span style={{ transform: flipped && !shouldReduce ? 'rotateY(180deg)' : 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span className="flag" aria-hidden="true" title={question.prompt_lang === 'de' ? 'Deutsch' : 'English'}>{question.prompt_lang === 'de' ? <svg viewBox="0 0 5 3" width="22" height="13" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block'}}><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg> : <svg viewBox="0 0 60 30" width="22" height="13" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block'}}><rect width="60" height="30" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="white" strokeWidth="6"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#C8102E" strokeWidth="4"/><path d="M30 0 V30 M0 15 H60" stroke="white" strokeWidth="10"/><path d="M30 0 V30 M0 15 H60" stroke="#C8102E" strokeWidth="6"/></svg>}</span>
+              <span>{flipped && result && !result.correct ? result.correct_answer : question.prompt_word}</span>
             </span>
           </div>
         </motion.div>
@@ -172,7 +173,7 @@ export default function Quiz() {
             {result.correct ? <CheckCircle size={40} color="var(--color-primary)" /> : <XCircle size={40} color="var(--color-danger)" />}
           </div>
           <h3>{result.correct ? 'Richtig! 🎉' : 'Fast — not quite'}</h3>
-          {!result.correct && <p>The answer was: <strong>{result.correct_answer}</strong></p>}
+          {!result.correct && <p>The answer was: <span className="flag" aria-hidden="true" title={question.prompt_lang === 'de' ? 'English' : 'Deutsch'}>{question.prompt_lang === 'de' ? <svg viewBox="0 0 60 30" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="60" height="30" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="white" strokeWidth="6"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#C8102E" strokeWidth="4"/><path d="M30 0 V30 M0 15 H60" stroke="white" strokeWidth="10"/><path d="M30 0 V30 M0 15 H60" stroke="#C8102E" strokeWidth="6"/></svg> : <svg viewBox="0 0 5 3" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg>}</span> <strong>{result.correct_answer}</strong></p>}
           <div style={{ display: 'flex', justifyContent: 'center', gap: '0.6rem', marginTop: '1rem', flexWrap: 'wrap' }}>
             {!pendingAudio && result.audio_url ? (
               audioLoading ? <button className="play-large-btn" disabled><Loader2 size={16} className="animate-spin" /> Loading…</button> : <button className="play-large-btn" onClick={() => handlePlay(result.audio_url)}><Volume2 size={16} /> Play Audio</button>
