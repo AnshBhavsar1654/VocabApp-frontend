@@ -17,6 +17,10 @@
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --dur-fast: 180ms;
   --dur-mid: 260ms;
+
+  /* layout — navbar shell */
+  --nav-height: 64px;
+  --content-max: 860px;
 }
 
 /* Light — warm paper, stamp-like */
