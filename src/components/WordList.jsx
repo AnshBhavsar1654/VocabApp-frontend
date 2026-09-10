@@ -12,6 +12,7 @@ export default function WordList() {
   const [editGerman, setEditGerman] = useState('');
   const [search, setSearch] = useState('');
   const [groupDropdownWordId, setGroupDropdownWordId] = useState(null);
+  const [audioLoadingId, setAudioLoadingId] = useState(null);
 
   const { data: words = [], isLoading, isFetching, error: queryError, refetch } = useQuery({
     queryKey: ['words'],
@@ -76,6 +77,12 @@ export default function WordList() {
     if (!word) return;
     const isInGroup = word.groups.some(g => g.id === groupId);
     toggleGroupMutation.mutate({ wordId, groupId, isInGroup }, { onError: (err) => alert('Failed: ' + err.message) });
+  };
+
+  const handlePlay = async (url, id) => {
+    if (!url || audioLoadingId) return;
+    setAudioLoadingId(id);
+    try { await playAudioWithBuffer(url); } catch (e) { console.warn('Audio play failed', e); } finally { setAudioLoadingId(null); }
   };
 
   if (isLoading) {
@@ -149,10 +156,10 @@ export default function WordList() {
                     <input type="text" className="text-input" value={editGerman} onChange={e => setEditGerman(e.target.value)} style={{ flex: '1 1 90px', padding: '0.5rem 0.6rem', fontSize: '0.9rem' }} disabled={updateMutation.isPending} />
                   </div>
                   <div className="word-actions">
-                    <button className="btn-icon" onClick={() => saveEdit(word.id)} disabled={updateMutation.isPending || !editEnglish.trim() || !editGerman.trim()} style={{ color: 'var(--color-success)' }}>
-                      {updateMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                    <button className="btn-icon" onClick={() => saveEdit(word.id)} disabled={(updateMutation.isPending && updateMutation.variables?.id === word.id) || !editEnglish.trim() || !editGerman.trim()} style={{ color: 'var(--color-success)' }}>
+                      {(updateMutation.isPending && updateMutation.variables?.id === word.id) ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                     </button>
-                    <button className="btn-icon" onClick={cancelEdit} disabled={updateMutation.isPending}><X size={16} /></button>
+                    <button className="btn-icon" onClick={cancelEdit} disabled={updateMutation.isPending && updateMutation.variables?.id === word.id}><X size={16} /></button>
                   </div>
                 </>
               ) : (
@@ -170,15 +177,17 @@ export default function WordList() {
                   )}
                   <div className="word-actions">
                     <div className="group-dropdown-wrapper">
-                      <button className="btn-icon" onClick={(e) => { e.stopPropagation(); setGroupDropdownWordId(groupDropdownWordId === word.id ? null : word.id); }} title="Manage groups"><Layers size={16} /></button>
+                      <button className="btn-icon" onClick={(e) => { e.stopPropagation(); setGroupDropdownWordId(groupDropdownWordId === word.id ? null : word.id); }} title="Manage groups" disabled={toggleGroupMutation.isPending}><Layers size={16} /></button>
                       {groupDropdownWordId === word.id && (
                         <div className="group-dropdown" onClick={e => e.stopPropagation()}>
                           {groups.map(g => {
                             const inGroup = word.groups?.some(wg => wg.id === g.id);
+                            const toggling = toggleGroupMutation.isPending && toggleGroupMutation.variables?.wordId === word.id && toggleGroupMutation.variables?.groupId === g.id;
                             return (
                               <label key={g.id} className="group-dropdown-item">
                                 <input type="checkbox" checked={inGroup} onChange={() => toggleGroup(word.id, g.id)} disabled={toggleGroupMutation.isPending} />
                                 <span>{g.name}</span>
+                                {toggling && <Loader2 size={12} className="animate-spin" style={{ marginLeft: 'auto' }} />}
                               </label>
                             );
                           })}
@@ -187,11 +196,13 @@ export default function WordList() {
                     </div>
                     {pending ? (
                       <span className="pending-pill" title="Audio is generating — will appear shortly"><Loader2 size={12} className="animate-spin" /> generating…</span>
+                    ) : audioLoadingId === word.id ? (
+                      <button className="btn-icon" disabled title="Loading audio"><Loader2 size={16} className="animate-spin" /></button>
                     ) : (
-                      <button className="btn-icon" onClick={() => playAudioWithBuffer(word.audio_url)} title="Play audio"><Volume2 size={16} /></button>
+                      <button className="btn-icon" onClick={() => handlePlay(word.audio_url, word.id)} title="Play audio"><Volume2 size={16} /></button>
                     )}
-                    <button className="btn-icon" onClick={() => startEdit(word)} title="Edit"><Pencil size={16} /></button>
-                    <button className="btn-icon danger" onClick={() => handleDelete(word.id)} title="Delete" disabled={deleteMutation.isPending}><Trash2 size={16} /></button>
+                    <button className="btn-icon" onClick={() => startEdit(word)} title="Edit" disabled={deleteMutation.isPending || updateMutation.isPending || audioLoadingId !== null}><Pencil size={16} /></button>
+                    <button className="btn-icon danger" onClick={() => handleDelete(word.id)} title="Delete" disabled={deleteMutation.isPending || audioLoadingId !== null}>{(deleteMutation.isPending && deleteMutation.variables === word.id) ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}</button>
                   </div>
                 </>
               )}

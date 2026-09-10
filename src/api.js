@@ -117,26 +117,36 @@ export const api = {
 };
 
 export const playAudioWithBuffer = (url) => {
-  if (!url) return;
-  try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (AudioContext) {
-      const ctx = new AudioContext();
-      const osc = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-      gainNode.gain.value = 0;
-      osc.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.5);
-
-      setTimeout(() => {
-        new Audio(url).play();
-      }, 500);
-      return;
+  if (!url) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const doPlay = () => {
+      const audio = new Audio(url);
+      let settled = false;
+      const done = () => { if (!settled) { settled = true; resolve(); } };
+      const fail = (e) => { if (!settled) { settled = true; reject(e); } };
+      audio.addEventListener('playing', done, { once: true });
+      audio.addEventListener('error', fail, { once: true });
+      // fallback — some browsers don't fire playing reliably
+      setTimeout(done, 3000);
+      audio.play().catch(fail);
+    };
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (AudioContext) {
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        gainNode.gain.value = 0;
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.5);
+        setTimeout(doPlay, 500);
+        return;
+      }
+    } catch (e) {
+      console.warn("AudioContext wakeup failed", e);
     }
-  } catch (e) {
-    console.warn("AudioContext wakeup failed", e);
-  }
-  new Audio(url).play();
+    doPlay();
+  });
 };

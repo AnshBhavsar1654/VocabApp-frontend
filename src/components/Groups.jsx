@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { api, playAudioWithBuffer } from '../api';
 import { Layers, Plus, Trash2, Pencil, Check, X, Volume2, Search, Loader2, FolderOpen, Users, Backpack } from 'lucide-react';
 
@@ -8,11 +8,16 @@ export default function Groups() {
   const queryClient = useQueryClient();
   const shouldReduce = useReducedMotion();
   const [selectedGroupId, setSelectedGroupId] = useState(null);
-  const [newGroupName, setNewGroupName] = useState('');
-  const [editingGroupId, setEditingGroupId] = useState(null);
-  const [editingName, setEditingName] = useState('');
   const [showAddWords, setShowAddWords] = useState(false);
   const [addWordsSearch, setAddWordsSearch] = useState('');
+
+  // popups
+  const [showCreate, setShowCreate] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [showEdit, setShowEdit] = useState(false);
+  const [editTarget, setEditTarget] = useState(null);
+  const [editingName, setEditingName] = useState('');
+  const [audioLoadingId, setAudioLoadingId] = useState(null);
 
   const { data: groups = [], isLoading, isFetching: groupsFetching, error: groupsError } = useQuery({ queryKey: ['groups'], queryFn: api.getGroups, staleTime: 60_000 });
   const { data: allWords = [] } = useQuery({ queryKey: ['words'], queryFn: api.getWords, staleTime: 60_000 });
@@ -35,23 +40,45 @@ export default function Groups() {
     return allWords.filter(w => !ids.has(w.id) && (w.english_word.toLowerCase().includes(q) || w.german_word.toLowerCase().includes(q)));
   }, [allWords, groupWords, addWordsSearch]);
 
-  const createGroupMutation = useMutation({ mutationFn: (name) => api.createGroup(name), onSuccess: (g) => { queryClient.invalidateQueries({ queryKey: ['groups'] }); setNewGroupName(''); setSelectedGroupId(g.id); } });
-  const renameGroupMutation = useMutation({ mutationFn: ({ groupId, name }) => api.renameGroup(groupId, name), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['groups'] }); setEditingGroupId(null); } });
+  const createGroupMutation = useMutation({ mutationFn: (name) => api.createGroup(name), onSuccess: (g) => { queryClient.invalidateQueries({ queryKey: ['groups'] }); setNewGroupName(''); setShowCreate(false); setSelectedGroupId(g.id); } });
+  const renameGroupMutation = useMutation({ mutationFn: ({ groupId, name }) => api.renameGroup(groupId, name), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['groups'] }); setShowEdit(false); setEditTarget(null); } });
   const deleteGroupMutation = useMutation({
     mutationFn: (id) => api.deleteGroup(id),
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ['groups'] }); queryClient.invalidateQueries({ queryKey: ['groupWords'] });
+      setShowEdit(false); setEditTarget(null);
       if (selectedGroupId === id) { const d = groups.find(g => g.is_default); setSelectedGroupId(d ? d.id : null); }
     },
   });
   const addWordsMutation = useMutation({ mutationFn: ({ groupId, wordIds }) => api.addWordsToGroup(groupId, wordIds), onSuccess: (_, { groupId }) => { queryClient.invalidateQueries({ queryKey: ['groupWords', groupId] }); queryClient.invalidateQueries({ queryKey: ['groups'] }); queryClient.invalidateQueries({ queryKey: ['words'] }); setShowAddWords(false); setAddWordsSearch(''); } });
   const removeWordMutation = useMutation({ mutationFn: ({ groupId, wordId }) => api.removeWordFromGroup(groupId, wordId), onSuccess: (_, { groupId }) => { queryClient.invalidateQueries({ queryKey: ['groupWords', groupId] }); queryClient.invalidateQueries({ queryKey: ['groups'] }); } });
 
-  const handleCreate = () => { const n = newGroupName.trim(); if (!n) return alert('Enter a name'); createGroupMutation.mutate(n, { onError: e => alert(e.message) }); };
-  const handleRename = (id) => { const n = editingName.trim(); if (!n) return; renameGroupMutation.mutate({ groupId: id, name: n }, { onError: e => alert(e.message) }); };
-  const handleDelete = (id) => { if (!confirm('Delete group? Words move to Ungrouped.')) return; deleteGroupMutation.mutate(id, { onError: e => alert(e.message) }); };
+  const handleCreate = () => { const n = newGroupName.trim(); if (!n) return; createGroupMutation.mutate(n, { onError: e => alert(e.message) }); };
+  const handleRename = () => { const n = editingName.trim(); if (!n || !editTarget) return; renameGroupMutation.mutate({ groupId: editTarget.id, name: n }, { onError: e => alert(e.message) }); };
+  const handleDelete = () => { if (!editTarget) return; if (!confirm('Delete group? Words move to Ungrouped.')) return; deleteGroupMutation.mutate(editTarget.id, { onError: e => alert(e.message) }); };
   const handleAdd = (ids) => { if (!selectedGroupId || !ids.length) return; addWordsMutation.mutate({ groupId: selectedGroupId, wordIds: ids }, { onError: e => alert(e.message) }); };
   const handleRemove = (wid) => { if (!selectedGroupId) return; removeWordMutation.mutate({ groupId: selectedGroupId, wordId: wid }, { onError: e => alert(e.message) }); };
+  const handlePlay = async (url, id) => { if (!url || audioLoadingId) return; setAudioLoadingId(id); try { await playAudioWithBuffer(url); } catch (e) { console.warn('Audio failed', e); } finally { setAudioLoadingId(null); } };
+
+  const handleGroupClick = (g) => {
+    if (selectedGroupId === g.id && !g.is_default) {
+      setEditTarget(g);
+      setEditingName(g.name);
+      setShowEdit(true);
+      return;
+    }
+    setSelectedGroupId(g.id);
+    // animate feedback already via motion; open edit only on second click for non-default
+    if (g.is_default) return;
+    // first click just selects; second click opens edit (handled above). No auto-popup on first.
+  };
+
+  const openEditFor = (g) => {
+    if (g.is_default) return;
+    setEditTarget(g);
+    setEditingName(g.name);
+    setShowEdit(true);
+  };
 
   if (isLoading) {
     return (
@@ -62,39 +89,40 @@ export default function Groups() {
   }
 
   return (
-    <div className="groups-layout">
-      <div className="groups-sidebar card">
-        <div className="groups-sidebar-header">
+    <div className="groups-page">
+      {/* Top strip — between navbar/stat and words */}
+      <div className="groups-strip-wrapper card">
+        <div className="groups-strip-header">
           <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>Groups {groupsFetching && !isLoading && <Loader2 size={14} className="animate-spin" />}</h2>
+          <button className="btn-primary-style btn-sm" onClick={() => { setNewGroupName(''); setShowCreate(true); }}><Plus size={14} /> New group</button>
         </div>
-        <div className="group-create">
-          <input type="text" className="text-input" placeholder="New group — z.B. Uni Köln" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCreate()} disabled={createGroupMutation.isPending} style={{ fontSize: '0.85rem', padding: '0.55rem 0.7rem' }} />
-          <button className="btn-icon" onClick={handleCreate} disabled={createGroupMutation.isPending} style={{ minWidth: 38 }}>{createGroupMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}</button>
+        {error && <div className="status-msg error" style={{ fontSize: '0.82rem', marginBottom: '0.6rem' }}>{error}</div>}
+        <div className="groups-strip" role="tablist" aria-label="Groups">
+          {groups.map(g => {
+            const active = selectedGroupId === g.id;
+            return (
+              <motion.button
+                key={g.id}
+                role="tab"
+                aria-selected={active}
+                onClick={() => handleGroupClick(g)}
+                onDoubleClick={() => openEditFor(g)}
+                className={`group-pill ${active ? 'active' : ''} ${g.is_default ? 'is-default' : ''}`}
+                whileTap={shouldReduce ? {} : { scale: 0.97 }}
+                initial={false}
+                animate={{ scale: active ? 1.02 : 1 }}
+                transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                title={g.is_default ? 'Default group' : 'Click to select — click again to edit'}
+              >
+                <span className="group-pill-icon">{g.is_default ? <FolderOpen size={14} /> : <Layers size={14} />}</span>
+                <span className="group-pill-name">{g.name}</span>
+                <span className="group-pill-count">{g.word_count}</span>
+                {!g.is_default && active && <Pencil size={12} className="group-pill-edit-hint" />}
+              </motion.button>
+            );
+          })}
         </div>
-        {error && <div className="status-msg error" style={{ fontSize: '0.82rem' }}>{error}</div>}
-        <div className="group-list">
-          {groups.map(g => (
-            <div key={g.id} className={`group-item ${selectedGroupId === g.id ? 'active' : ''}`} onClick={() => !editingGroupId && setSelectedGroupId(g.id)}>
-              {editingGroupId === g.id ? (
-                <div className="group-item-edit">
-                  <input type="text" className="text-input" value={editingName} onChange={e => setEditingName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleRename(g.id); if (e.key === 'Escape') setEditingGroupId(null); }} autoFocus disabled={renameGroupMutation.isPending} style={{ fontSize: '0.85rem', padding: '0.35rem 0.5rem', flex: 1 }} />
-                  <button className="btn-icon" onClick={() => handleRename(g.id)} disabled={renameGroupMutation.isPending} style={{ minWidth: 32, minHeight: 32 }}>{renameGroupMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}</button>
-                  <button className="btn-icon" onClick={() => setEditingGroupId(null)} style={{ minWidth: 32, minHeight: 32 }}><X size={14} /></button>
-                </div>
-              ) : (
-                <>
-                  <div className="group-item-info">{g.is_default ? <FolderOpen size={14} /> : <Layers size={14} />}<span className="group-item-name">{g.name}</span><span className="group-item-count">{g.word_count}</span></div>
-                  {!g.is_default && (
-                    <div className="group-item-actions">
-                      <button className="btn-icon" onClick={e => { e.stopPropagation(); setEditingGroupId(g.id); setEditingName(g.name); }} style={{ minWidth: 30, minHeight: 30 }}><Pencil size={13} /></button>
-                      <button className="btn-icon danger" onClick={e => { e.stopPropagation(); handleDelete(g.id); }} style={{ minWidth: 30, minHeight: 30 }}><Trash2 size={13} /></button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          ))}
-        </div>
+        <p className="groups-strip-hint">Tap a group to filter · Tap again on a custom group to edit</p>
       </div>
 
       <div className="groups-panel card">
@@ -105,7 +133,16 @@ export default function Groups() {
               <button className="btn-primary-style btn-sm" onClick={() => setShowAddWords(true)}><Plus size={14} /> Add Words</button>
             </div>
             {groupLoading ? (
-              <div style={{ padding: '1.5rem', textAlign: 'center' }}><Loader2 size={22} className="animate-spin" /></div>
+              <div className="word-list" aria-busy="true" aria-label="Loading words">
+                {[1, 2, 3, 4, 5].map(i => (
+                  <div key={i} className="skeleton-row">
+                    <div className="skeleton skeleton-text" style={{ maxWidth: '40%' }} />
+                    <div className="skeleton skeleton-text" style={{ maxWidth: '30%' }} />
+                    <div className="skeleton skeleton-icon" />
+                    <div className="skeleton skeleton-icon" />
+                  </div>
+                ))}
+              </div>
             ) : groupWords.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-backpack"><Users size={28} /></div>
@@ -124,8 +161,8 @@ export default function Groups() {
                         {pending && <span className="pending-pill"><Loader2 size={11} className="animate-spin" /> audio pending</span>}
                       </div>
                       <div className="word-actions">
-                        {pending ? <span className="pending-pill" title="Audio generating"><Loader2 size={11} className="animate-spin" /> generating…</span> : <button className="btn-icon" onClick={() => playAudioWithBuffer(word.audio_url)} title="Play"><Volume2 size={16} /></button>}
-                        {!selectedGroup.is_default && <button className="btn-icon danger" onClick={() => handleRemove(word.id)} title="Remove" disabled={removeWordMutation.isPending}><X size={16} /></button>}
+                        {pending ? <span className="pending-pill" title="Audio generating"><Loader2 size={11} className="animate-spin" /> generating…</span> : audioLoadingId === word.id ? <button className="btn-icon" disabled title="Loading audio"><Loader2 size={16} className="animate-spin" /></button> : <button className="btn-icon" onClick={() => handlePlay(word.audio_url, word.id)} title="Play"><Volume2 size={16} /></button>}
+                        {!selectedGroup.is_default && <button className="btn-icon danger" onClick={() => handleRemove(word.id)} title="Remove" disabled={removeWordMutation.isPending || audioLoadingId !== null}>{(removeWordMutation.isPending && removeWordMutation.variables?.wordId === word.id) ? <Loader2 size={16} className="animate-spin" /> : <X size={16} />}</button>}
                       </div>
                     </motion.div>
                   );
@@ -134,9 +171,52 @@ export default function Groups() {
             )}
           </>
         ) : (
-          <div className="empty-state"><div className="empty-backpack"><Backpack size={28} /></div><h3>Wähle eine Gruppe</h3><p>Select a group on the left to see its words.</p></div>
+          <div className="empty-state"><div className="empty-backpack"><Backpack size={28} /></div><h3>Wähle eine Gruppe</h3><p>Select a group above to see its words.</p></div>
         )}
       </div>
+
+      {/* Create popup */}
+      <AnimatePresence>
+        {showCreate && (
+          <motion.div className="modal-overlay" onClick={() => setShowCreate(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div className="modal-content card modal-narrow" onClick={e => e.stopPropagation()} initial={shouldReduce ? false : { scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={shouldReduce ? {} : { scale: 0.96, opacity: 0 }} transition={{ duration: 0.2 }}>
+              <div className="modal-header"><h2>New group</h2><button className="btn-icon" onClick={() => setShowCreate(false)}><X size={18} /></button></div>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.75rem' }}>Create a new collection — z.B. “Uni Köln”, “Reise”.</p>
+              <div className="input-group">
+                <label className="input-label" htmlFor="new-group-input">Group name</label>
+                <input id="new-group-input" type="text" className="text-input" placeholder="e.g. Numbers" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} onKeyDown={e => { if (e.key==='Enter') handleCreate(); if (e.key==='Escape') setShowCreate(false); }} autoFocus disabled={createGroupMutation.isPending} />
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                <button className="btn-icon" style={{ width:'auto', padding:'0 0.9rem', borderRadius:'var(--radius-md)' }} onClick={() => setShowCreate(false)}>Cancel</button>
+                <button className="btn-primary-style" onClick={handleCreate} disabled={createGroupMutation.isPending || !newGroupName.trim()}>{createGroupMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Create</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit popup */}
+      <AnimatePresence>
+        {showEdit && editTarget && (
+          <motion.div className="modal-overlay" onClick={() => setShowEdit(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div className="modal-content card modal-narrow" onClick={e => e.stopPropagation()} initial={shouldReduce ? false : { scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={shouldReduce ? {} : { scale: 0.96, opacity: 0 }} transition={{ duration: 0.2 }}>
+              <div className="modal-header"><h2>Edit group</h2><button className="btn-icon" onClick={() => setShowEdit(false)}><X size={18} /></button></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}><Layers size={14} /> {editTarget.name} · {editTarget.word_count} words</div>
+              <div className="input-group">
+                <label className="input-label" htmlFor="edit-group-input">Group name</label>
+                <input id="edit-group-input" type="text" className="text-input" value={editingName} onChange={e => setEditingName(e.target.value)} onKeyDown={e => { if (e.key==='Enter') handleRename(); if (e.key==='Escape') setShowEdit(false); }} autoFocus disabled={renameGroupMutation.isPending} />
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'space-between', flexWrap:'wrap' }}>
+                <button className="btn-icon danger" style={{ width:'auto', padding:'0 0.9rem', borderRadius:'var(--radius-md)', borderColor:'var(--color-danger)' }} onClick={handleDelete} disabled={deleteGroupMutation.isPending}><Trash2 size={14} /> Delete group</button>
+                <div style={{ display:'flex', gap:'0.5rem' }}>
+                  <button className="btn-icon" style={{ width:'auto', padding:'0 0.9rem', borderRadius:'var(--radius-md)' }} onClick={() => setShowEdit(false)}>Cancel</button>
+                  <button className="btn-primary-style" onClick={handleRename} disabled={renameGroupMutation.isPending || !editingName.trim()}>{renameGroupMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save</button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {showAddWords && (
         <div className="modal-overlay" onClick={() => setShowAddWords(false)}>
@@ -149,7 +229,7 @@ export default function Groups() {
               ) : wordsNotInGroup.map(w => (
                 <div key={w.id} className="add-word-item">
                   <span style={{ fontSize: '0.9rem' }}><strong>{w.english_word}</strong> <span style={{ color: 'var(--color-text-muted)' }}>↔ {w.german_word}</span>{!w.audio_url && <span className="pending-pill" style={{ marginLeft: 6 }}><Loader2 size={10} className="animate-spin" /> pending</span>}</span>
-                  <button className="btn-icon" onClick={() => handleAdd([w.id])} disabled={addWordsMutation.isPending} style={{ minWidth: 36 }}>{addWordsMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}</button>
+                  <button className="btn-icon" onClick={() => handleAdd([w.id])} disabled={addWordsMutation.isPending} style={{ minWidth: 36 }}>{(addWordsMutation.isPending && JSON.stringify(addWordsMutation.variables?.wordIds) === JSON.stringify([w.id])) ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}</button>
                 </div>
               ))}
             </div>

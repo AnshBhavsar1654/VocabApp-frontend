@@ -8,8 +8,15 @@ export default function AddWordForm() {
   const [text, setText] = useState('');
   const [sourceLang, setSourceLang] = useState('en');
   const [lastAdded, setLastAdded] = useState(null);
+  const [audioLoading, setAudioLoading] = useState(false);
   const queryClient = useQueryClient();
   const shouldReduce = useReducedMotion();
+
+  const handlePlay = async (url) => {
+    if (!url || audioLoading) return;
+    setAudioLoading(true);
+    try { await playAudioWithBuffer(url); } catch {} finally { setAudioLoading(false); }
+  };
 
   const addMutation = useMutation({
     mutationFn: ({ text: t, sourceLang: sl, entryType }) => api.addWord(t, sl, entryType),
@@ -94,8 +101,10 @@ export default function AddWordForm() {
             <span style={{ fontWeight: 700, color: 'var(--color-primary-strong)' }}>{lastAdded.german_word}</span>
             {pendingAudio ? (
               <span className="pending-pill"><Loader2 size={12} className="animate-spin" /> generating audio…</span>
+            ) : audioLoading ? (
+              <button className="btn-icon" disabled style={{ width: 36, height: 36 }} title="Loading audio"><Loader2 size={18} className="animate-spin" /></button>
             ) : (
-              <button className="btn-icon" onClick={() => playAudioWithBuffer(lastAdded.audio_url)} title="Play audio" style={{ width: 36, height: 36 }}>
+              <button className="btn-icon" onClick={() => handlePlay(lastAdded.audio_url)} title="Play audio" style={{ width: 36, height: 36 }}>
                 <Volume2 size={18} />
               </button>
             )}

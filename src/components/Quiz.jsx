@@ -12,6 +12,8 @@ export default function Quiz() {
   const [showConfetti, setShowConfetti] = useState(false);
   const shouldReduce = useReducedMotion();
   const [flipped, setFlipped] = useState(false);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [nextLoading, setNextLoading] = useState(false);
 
   const { data: question, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ['quizNext'],
@@ -32,19 +34,26 @@ export default function Quiz() {
 
   const checkMutation = useMutation({
     mutationFn: ({ id, prompt_lang, user_answer }) => api.checkQuiz(id, prompt_lang, user_answer),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       setResult(res);
       setFlipped(true);
       bumpStreak(res.correct);
-      if (res.correct) {
-        playAudioWithBuffer(res.audio_url);
+      if (res.correct && res.audio_url) {
+        setAudioLoading(true);
+        try { await playAudioWithBuffer(res.audio_url); } catch {} finally { setAudioLoading(false); }
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 900);
       }
     },
   });
 
-  const loadNext = async () => { setResult(null); setAnswer(''); setFlipped(false); await refetch(); };
+  const loadNext = async () => { if (nextLoading) return; setNextLoading(true); setResult(null); setAnswer(''); setFlipped(false); try { await refetch(); } finally { setNextLoading(false); } };
+
+  const handlePlay = async (url) => {
+    if (!url || audioLoading) return;
+    setAudioLoading(true);
+    try { await playAudioWithBuffer(url); } catch {} finally { setAudioLoading(false); }
+  };
   const handleCheck = (e) => {
     e.preventDefault();
     if (!answer.trim() || !question) return;
@@ -129,8 +138,10 @@ export default function Quiz() {
 
         {pendingAudio ? (
           <span className="pending-pill"><Loader2 size={12} className="animate-spin" /> audio generating…</span>
+        ) : audioLoading ? (
+          <button className="play-large-btn" disabled><Loader2 size={16} className="animate-spin" /> Loading…</button>
         ) : (
-          <button className="play-large-btn" onClick={() => playAudioWithBuffer(question.audio_url)}><Volume2 size={16} /> Listen</button>
+          <button className="play-large-btn" onClick={() => handlePlay(question.audio_url)} disabled={checkMutation.isPending}><Volume2 size={16} /> Listen</button>
         )}
       </div>
 
@@ -164,11 +175,11 @@ export default function Quiz() {
           {!result.correct && <p>The answer was: <strong>{result.correct_answer}</strong></p>}
           <div style={{ display: 'flex', justifyContent: 'center', gap: '0.6rem', marginTop: '1rem', flexWrap: 'wrap' }}>
             {!pendingAudio && result.audio_url ? (
-              <button className="play-large-btn" onClick={() => playAudioWithBuffer(result.audio_url)}><Volume2 size={16} /> Play Audio</button>
+              audioLoading ? <button className="play-large-btn" disabled><Loader2 size={16} className="animate-spin" /> Loading…</button> : <button className="play-large-btn" onClick={() => handlePlay(result.audio_url)}><Volume2 size={16} /> Play Audio</button>
             ) : pendingAudio ? (
               <span className="pending-pill"><Loader2 size={12} className="animate-spin" /> audio pending</span>
             ) : null}
-            <button className="btn-primary" style={{ width: 'auto', padding: '0.6rem 1.25rem' }} onClick={loadNext}>Next <ArrowRight size={16} /></button>
+            <button className="btn-primary" style={{ width: 'auto', padding: '0.6rem 1.25rem' }} onClick={loadNext} disabled={nextLoading || isFetching}>{nextLoading || isFetching ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />} Next</button>
           </div>
         </motion.div>
       )}
