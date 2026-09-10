@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { api, playAudioWithBuffer } from '../api';
-import { Layers, Plus, Trash2, Pencil, Check, X, Volume2, Search, Loader2, FolderOpen, Users, Backpack } from 'lucide-react';
+import { Layers, Plus, Trash2, Pencil, Check, X, Volume2, Search, Loader2, FolderOpen, Users, Backpack, MoreHorizontal } from 'lucide-react';
 
 export default function Groups() {
   const queryClient = useQueryClient();
@@ -18,6 +18,7 @@ export default function Groups() {
   const [editTarget, setEditTarget] = useState(null);
   const [editingName, setEditingName] = useState('');
   const [audioLoadingId, setAudioLoadingId] = useState(null);
+  const [openActionsId, setOpenActionsId] = useState(null);
 
   const { data: groups = [], isLoading, isFetching: groupsFetching, error: groupsError } = useQuery({ queryKey: ['groups'], queryFn: api.getGroups, staleTime: 60_000 });
   const { data: allWords = [] } = useQuery({ queryKey: ['words'], queryFn: api.getWords, staleTime: 60_000 });
@@ -59,6 +60,13 @@ export default function Groups() {
   const handleAdd = (ids) => { if (!selectedGroupId || !ids.length) return; addWordsMutation.mutate({ groupId: selectedGroupId, wordIds: ids }, { onError: e => alert(e.message) }); };
   const handleRemove = (wid) => { if (!selectedGroupId) return; removeWordMutation.mutate({ groupId: selectedGroupId, wordId: wid }, { onError: e => alert(e.message) }); };
   const handlePlay = async (url, id) => { if (!url || audioLoadingId) return; setAudioLoadingId(id); try { await playAudioWithBuffer(url); } catch (e) { console.warn('Audio failed', e); } finally { setAudioLoadingId(null); } };
+
+  React.useEffect(() => {
+    if (openActionsId === null) return;
+    const close = (e) => { if (e.target.closest('.word-tile')) return; setOpenActionsId(null); };
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [openActionsId]);
 
   const handleGroupClick = (g) => {
     if (selectedGroupId === g.id && !g.is_default) {
@@ -133,14 +141,9 @@ export default function Groups() {
               <button className="btn-primary-style btn-sm" onClick={() => setShowAddWords(true)}><Plus size={14} /> Add Words</button>
             </div>
             {groupLoading ? (
-              <div className="word-list" aria-busy="true" aria-label="Loading words">
-                {[1, 2, 3, 4, 5].map(i => (
-                  <div key={i} className="skeleton-row">
-                    <div className="skeleton skeleton-text" style={{ maxWidth: '40%' }} />
-                    <div className="skeleton skeleton-text" style={{ maxWidth: '30%' }} />
-                    <div className="skeleton skeleton-icon" />
-                    <div className="skeleton skeleton-icon" />
-                  </div>
+              <div className="word-grid" aria-busy="true" aria-label="Loading words">
+                {[1,2,3,4,5,6].map(i => (
+                  <div key={i} className="skeleton" style={{ height: 118, borderRadius: 'var(--radius-lg)' }} />
                 ))}
               </div>
             ) : groupWords.length === 0 ? (
@@ -151,19 +154,25 @@ export default function Groups() {
                 <p className="hint">Words live in Ungrouped until you sort them.</p>
               </div>
             ) : (
-              <div className="word-list">
+              <div className="word-grid">
                 {groupWords.map((word, i) => {
                   const pending = !word.audio_url;
+                  const isOpen = openActionsId === word.id;
                   return (
-                    <motion.div key={word.id} className="word-item" initial={shouldReduce ? false : { opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.16, delay: Math.min(i * 0.02, 0.1) }}>
-                      <div className="word-item-content">
-                        <span className="word-lang"><span className="flag" aria-hidden="true" title="English"><svg viewBox="0 0 60 30" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="60" height="30" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="white" strokeWidth="6"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#C8102E" strokeWidth="4"/><path d="M30 0 V30 M0 15 H60" stroke="white" strokeWidth="10"/><path d="M30 0 V30 M0 15 H60" stroke="#C8102E" strokeWidth="6"/></svg></span> {word.english_word}</span><span className="word-separator">↔</span><span className="word-lang german"><span className="flag" aria-hidden="true" title="Deutsch"><svg viewBox="0 0 5 3" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg></span> {word.german_word}</span>
-                        {pending && <span className="pending-pill"><Loader2 size={11} className="animate-spin" /> audio pending</span>}
+                    <motion.div key={word.id} className="word-tile" initial={shouldReduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.16, delay: Math.min(i * 0.02, 0.1) }}>
+                      <div className="tile-top">
+                        <div className="tile-pair">
+                          <span className="word-lang"><span className="flag" aria-hidden="true" title="English"><svg viewBox="0 0 60 30" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="60" height="30" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="white" strokeWidth="6"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#C8102E" strokeWidth="4"/><path d="M30 0 V30 M0 15 H60" stroke="white" strokeWidth="10"/><path d="M30 0 V30 M0 15 H60" stroke="#C8102E" strokeWidth="6"/></svg></span> {word.english_word}</span>
+                          <span className="word-separator">↔</span>
+                          <span className="word-lang german"><span className="flag" aria-hidden="true" title="Deutsch"><svg viewBox="0 0 5 3" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg></span> {word.german_word}</span>
+                        </div>
+                        {pending ? <span className="pending-pill small" title="Audio generating"><Loader2 size={11} className="animate-spin" /></span> : audioLoadingId === word.id ? <button className="speaker-btn" disabled aria-label="Loading audio"><Loader2 size={16} className="animate-spin" /></button> : <button className="speaker-btn" onClick={() => handlePlay(word.audio_url, word.id)} aria-label="Play audio"><Volume2 size={16} /></button>}
                       </div>
-                      <div className="word-actions">
-                        {pending ? <span className="pending-pill" title="Audio generating"><Loader2 size={11} className="animate-spin" /> generating…</span> : audioLoadingId === word.id ? <button className="btn-icon" disabled title="Loading audio"><Loader2 size={16} className="animate-spin" /></button> : <button className="btn-icon" onClick={() => handlePlay(word.audio_url, word.id)} title="Play"><Volume2 size={16} /></button>}
-                        {!selectedGroup.is_default && <button className="btn-icon danger" onClick={() => handleRemove(word.id)} title="Remove" disabled={removeWordMutation.isPending || audioLoadingId !== null}>{(removeWordMutation.isPending && removeWordMutation.variables?.wordId === word.id) ? <Loader2 size={16} className="animate-spin" /> : <X size={16} />}</button>}
+                      {pending && <div className="tile-meta"><span className="pending-pill"><Loader2 size={11} className="animate-spin" /> no audio</span></div>}
+                      <div className={`tile-actions ${isOpen ? 'open' : ''}`}>
+                        {!selectedGroup.is_default && <button className="btn-icon small danger" onClick={() => handleRemove(word.id)} title="Remove from group" disabled={removeWordMutation.isPending || audioLoadingId !== null}>{(removeWordMutation.isPending && removeWordMutation.variables?.wordId === word.id) ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}</button>}
                       </div>
+                      <button className="more-btn" onClick={(e)=>{e.stopPropagation(); setOpenActionsId(isOpen?null:word.id);}} aria-label="More actions" aria-expanded={isOpen}><MoreHorizontal size={16} /></button>
                     </motion.div>
                   );
                 })}
