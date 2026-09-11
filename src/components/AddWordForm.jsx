@@ -3,8 +3,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, useReducedMotion } from 'framer-motion';
 import { api, playAudioWithBuffer } from '../api';
 import { Plus, Volume2, Loader2, Languages, Sparkles } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export default function AddWordForm() {
+  const { user } = useAuth();
   const [text, setText] = useState('');
   const [sourceLang, setSourceLang] = useState('en');
   const [lastAdded, setLastAdded] = useState(null);
@@ -21,8 +23,8 @@ export default function AddWordForm() {
   const addMutation = useMutation({
     mutationFn: ({ text: t, sourceLang: sl, entryType }) => api.addWord(t, sl, entryType),
     onSuccess: (word) => {
-      queryClient.invalidateQueries({ queryKey: ['words'] });
-      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      queryClient.invalidateQueries({ queryKey: ['words', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['groups', user?.id] });
       setLastAdded(word);
       setText('');
     },

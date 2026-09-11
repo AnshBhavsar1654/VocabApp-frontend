@@ -3,8 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, useReducedMotion } from 'framer-motion';
 import { api, playAudioWithBuffer } from '../api';
 import { Volume2, Trash2, Loader2, RefreshCw, Pencil, Check, X, Search, Layers, Backpack, Music2, MoreHorizontal, Filter } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export default function WordList() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const shouldReduce = useReducedMotion();
   const [editingId, setEditingId] = useState(null);
@@ -18,19 +20,20 @@ export default function WordList() {
   const [openActionsId, setOpenActionsId] = useState(null);
 
   const { data: words = [], isLoading, isFetching, error: queryError, refetch } = useQuery({
-    queryKey: ['words'],
+    queryKey: ['words', user?.id],
     queryFn: api.getWords,
     staleTime: 60_000,
+    enabled: !!user,
   });
-  const { data: groups = [] } = useQuery({ queryKey: ['groups'], queryFn: api.getGroups, staleTime: 60_000 });
+  const { data: groups = [] } = useQuery({ queryKey: ['groups', user?.id], queryFn: api.getGroups, staleTime: 60_000, enabled: !!user });
 
   const error = queryError?.message || null;
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteWord(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['words'] });
-      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      queryClient.invalidateQueries({ queryKey: ['words', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['groups', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['groupWords'] });
     },
   });
@@ -38,7 +41,7 @@ export default function WordList() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => api.updateWord(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['words'] });
+      queryClient.invalidateQueries({ queryKey: ['words', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['groupWords'] });
       setEditingId(null);
     },
@@ -47,8 +50,8 @@ export default function WordList() {
   const toggleGroupMutation = useMutation({
     mutationFn: ({ wordId, groupId, isInGroup }) => isInGroup ? api.removeWordFromGroup(groupId, wordId) : api.addWordsToGroup(groupId, [wordId]),
     onSuccess: (_, { groupId }) => {
-      queryClient.invalidateQueries({ queryKey: ['words'] });
-      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      queryClient.invalidateQueries({ queryKey: ['words', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['groups', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['groupWords', groupId] });
       queryClient.invalidateQueries({ queryKey: ['groupWords'] });
     },

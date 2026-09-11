@@ -3,8 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { api, playAudioWithBuffer } from '../api';
 import { Layers, Plus, Trash2, Pencil, Check, X, Volume2, Search, Loader2, FolderOpen, Users, Backpack, MoreHorizontal } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export default function Groups() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const shouldReduce = useReducedMotion();
   const [selectedGroupId, setSelectedGroupId] = useState(null);
@@ -20,12 +22,12 @@ export default function Groups() {
   const [audioLoadingId, setAudioLoadingId] = useState(null);
   const [openActionsId, setOpenActionsId] = useState(null);
 
-  const { data: groups = [], isLoading, isFetching: groupsFetching, error: groupsError } = useQuery({ queryKey: ['groups'], queryFn: api.getGroups, staleTime: 60_000 });
-  const { data: allWords = [] } = useQuery({ queryKey: ['words'], queryFn: api.getWords, staleTime: 60_000 });
+  const { data: groups = [], isLoading, isFetching: groupsFetching, error: groupsError } = useQuery({ queryKey: ['groups', user?.id], queryFn: api.getGroups, staleTime: 60_000, enabled: !!user });
+  const { data: allWords = [] } = useQuery({ queryKey: ['words', user?.id], queryFn: api.getWords, staleTime: 60_000, enabled: !!user });
   const { data: groupWordsData, isLoading: groupLoading, isFetching: groupFetching } = useQuery({
-    queryKey: ['groupWords', selectedGroupId],
+    queryKey: ['groupWords', user?.id, selectedGroupId],
     queryFn: () => api.getGroupWords(selectedGroupId),
-    enabled: !!selectedGroupId,
+    enabled: !!selectedGroupId && !!user,
     staleTime: 60_000,
   });
   const groupWords = groupWordsData?.words || [];
@@ -41,18 +43,18 @@ export default function Groups() {
     return allWords.filter(w => !ids.has(w.id) && (w.english_word.toLowerCase().includes(q) || w.german_word.toLowerCase().includes(q)));
   }, [allWords, groupWords, addWordsSearch]);
 
-  const createGroupMutation = useMutation({ mutationFn: (name) => api.createGroup(name), onSuccess: (g) => { queryClient.invalidateQueries({ queryKey: ['groups'] }); setNewGroupName(''); setShowCreate(false); setSelectedGroupId(g.id); } });
-  const renameGroupMutation = useMutation({ mutationFn: ({ groupId, name }) => api.renameGroup(groupId, name), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['groups'] }); setShowEdit(false); setEditTarget(null); } });
+  const createGroupMutation = useMutation({ mutationFn: (name) => api.createGroup(name), onSuccess: (g) => { queryClient.invalidateQueries({ queryKey: ['groups', user?.id] }); setNewGroupName(''); setShowCreate(false); setSelectedGroupId(g.id); } });
+  const renameGroupMutation = useMutation({ mutationFn: ({ groupId, name }) => api.renameGroup(groupId, name), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['groups', user?.id] }); setShowEdit(false); setEditTarget(null); } });
   const deleteGroupMutation = useMutation({
     mutationFn: (id) => api.deleteGroup(id),
     onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: ['groups'] }); queryClient.invalidateQueries({ queryKey: ['groupWords'] });
+      queryClient.invalidateQueries({ queryKey: ['groups', user?.id] }); queryClient.invalidateQueries({ queryKey: ['groupWords'] });
       setShowEdit(false); setEditTarget(null);
       if (selectedGroupId === id) { const d = groups.find(g => g.is_default); setSelectedGroupId(d ? d.id : null); }
     },
   });
-  const addWordsMutation = useMutation({ mutationFn: ({ groupId, wordIds }) => api.addWordsToGroup(groupId, wordIds), onSuccess: (_, { groupId }) => { queryClient.invalidateQueries({ queryKey: ['groupWords', groupId] }); queryClient.invalidateQueries({ queryKey: ['groups'] }); queryClient.invalidateQueries({ queryKey: ['words'] }); setShowAddWords(false); setAddWordsSearch(''); } });
-  const removeWordMutation = useMutation({ mutationFn: ({ groupId, wordId }) => api.removeWordFromGroup(groupId, wordId), onSuccess: (_, { groupId }) => { queryClient.invalidateQueries({ queryKey: ['groupWords', groupId] }); queryClient.invalidateQueries({ queryKey: ['groups'] }); } });
+  const addWordsMutation = useMutation({ mutationFn: ({ groupId, wordIds }) => api.addWordsToGroup(groupId, wordIds), onSuccess: (_, { groupId }) => { queryClient.invalidateQueries({ queryKey: ['groupWords', user?.id, groupId] }); queryClient.invalidateQueries({ queryKey: ['groups', user?.id] }); queryClient.invalidateQueries({ queryKey: ['words', user?.id] }); setShowAddWords(false); setAddWordsSearch(''); } });
+  const removeWordMutation = useMutation({ mutationFn: ({ groupId, wordId }) => api.removeWordFromGroup(groupId, wordId), onSuccess: (_, { groupId }) => { queryClient.invalidateQueries({ queryKey: ['groupWords', user?.id, groupId] }); queryClient.invalidateQueries({ queryKey: ['groups', user?.id] }); } });
 
   const handleCreate = () => { const n = newGroupName.trim(); if (!n) return; createGroupMutation.mutate(n, { onError: e => alert(e.message) }); };
   const handleRename = () => { const n = editingName.trim(); if (!n || !editTarget) return; renameGroupMutation.mutate({ groupId: editTarget.id, name: n }, { onError: e => alert(e.message) }); };

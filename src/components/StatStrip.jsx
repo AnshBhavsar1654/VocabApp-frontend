@@ -3,12 +3,15 @@ import { useQuery } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "framer-motion";
 import { Flame, BookOpen, Pencil, Check, X, Target } from "lucide-react";
 import { api } from "../api";
+import { useAuth } from "../context/AuthContext";
 
 export default function StatStrip() {
+  const { user } = useAuth();
   const { data: words = [] } = useQuery({
-    queryKey: ["words"],
+    queryKey: ["words", user?.id],
     queryFn: api.getWords,
     staleTime: 60_000,
+    enabled: !!user,
   });
   const shouldReduce = useReducedMotion();
   const wordCount = words.length;

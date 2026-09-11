@@ -3,4 +3,5 @@ export const PATHS = {
   WORDS: "/words",
   GROUPS: "/groups",
   QUIZ: "/quiz",
+  OAUTH_CONSENT: "/oauth/consent",
 };

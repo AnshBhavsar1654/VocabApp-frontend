@@ -3,10 +3,12 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { api, playAudioWithBuffer } from '../api';
 import { Volume2, Loader2, ArrowRight, CheckCircle, XCircle, Sparkles, Keyboard, RotateCcw, BookOpen, Trophy } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 function burstColors() { return ['#F5A623', '#15946A', '#2EDB8F', '#FFC84A']; }
 
 export default function Quiz({ onExit, onNeedWords }) {
+  const { user } = useAuth();
   const shouldReduce = useReducedMotion();
   const [sessionSize, setSessionSize] = useState(10);
   const [session, setSession] = useState(null); // {questions:[], size}
@@ -23,7 +25,7 @@ export default function Quiz({ onExit, onNeedWords }) {
   const inputRef = useRef(null);
 
   // need words count for guard (reuse getWords)
-  const { data: words = [] } = useQuery({ queryKey: ['words'], queryFn: api.getWords, staleTime: 60_000 });
+  const { data: words = [] } = useQuery({ queryKey: ['words', user?.id], queryFn: api.getWords, staleTime: 60_000, enabled: !!user });
   const wordsCount = words.length;
   const colors = burstColors();
 

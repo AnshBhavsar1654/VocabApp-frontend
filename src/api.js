@@ -1,8 +1,34 @@
-const API_URL = import.meta.env.API_URL || "http://localhost:8000";
+import { supabase } from "./lib/supabase";
+
+// MODE-driven API URL: single toggle VITE_MODE=dev -> localhost, else -> prod (render)
+const MODE = (import.meta.env.VITE_MODE || import.meta.env.MODE || "dev").toLowerCase();
+const API_URL = MODE === "dev"
+  ? (import.meta.env.VITE_API_URL || "http://localhost:8000")
+  : (import.meta.env.VITE_API_URL_PROD || import.meta.env.VITE_API_URL || "https://vocabapp-backend.onrender.com");
+
+async function authHeaders() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (token) return { Authorization: `Bearer ${token}` };
+  } catch {}
+  return {};
+}
+
+async function authFetch(url, options = {}) {
+  const headers = await authHeaders();
+  const mergedHeaders = { ...(options.headers || {}), ...headers };
+  const res = await fetch(url, { ...options, headers: mergedHeaders });
+  if (res.status === 401) {
+    // let caller handle; optionally sign out
+    // await supabase.auth.signOut(); // not auto to avoid loop
+  }
+  return res;
+}
 
 export const api = {
   addWord: async (text, source_lang, entry_type = "word") => {
-    const res = await fetch(`${API_URL}/words`, {
+    const res = await authFetch(`${API_URL}/words`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, source_lang, entry_type }),
@@ -11,19 +37,20 @@ export const api = {
       if (res.status === 409) {
         throw new Error("Word already exists in your vocabulary list.");
       }
-      throw new Error("Failed to add word.");
+      const d = await res.json().catch(()=>({}));
+      throw new Error(d.detail || "Failed to add word.");
     }
     return res.json();
   },
 
   getWords: async () => {
-    const res = await fetch(`${API_URL}/words`);
+    const res = await authFetch(`${API_URL}/words`);
     if (!res.ok) throw new Error("Failed to fetch words");
     return res.json();
   },
 
   updateWord: async (id, data) => {
-    const res = await fetch(`${API_URL}/words/${id}`, {
+    const res = await authFetch(`${API_URL}/words/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -33,14 +60,14 @@ export const api = {
   },
 
   deleteWord: async (id) => {
-    const res = await fetch(`${API_URL}/words/${id}`, {
+    const res = await authFetch(`${API_URL}/words/${id}`, {
       method: "DELETE",
     });
     if (!res.ok) throw new Error("Failed to delete word");
   },
 
   getQuizNext: async () => {
-    const res = await fetch(`${API_URL}/quiz/next`);
+    const res = await authFetch(`${API_URL}/quiz/next`);
     if (!res.ok) {
       if (res.status === 404) throw new Error("No words available for quiz");
       throw new Error("Failed to fetch quiz");
@@ -49,7 +76,7 @@ export const api = {
   },
 
   getQuizSession: async (size = 10) => {
-    const res = await fetch(`${API_URL}/quiz/session?size=${size}`);
+    const res = await authFetch(`${API_URL}/quiz/session?size=${size}`);
     if (!res.ok) {
       const d = await res.json().catch(()=>({}));
       throw new Error(d.detail || "Failed to fetch quiz session");
@@ -58,7 +85,7 @@ export const api = {
   },
 
   recordQuizResult: async ({ word_id, is_correct, self_assessment, typed_answer, prompt_lang }) => {
-    const res = await fetch(`${API_URL}/quiz/record`, {
+    const res = await authFetch(`${API_URL}/quiz/record`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ word_id, is_correct, self_assessment, typed_answer, prompt_lang }),
@@ -71,7 +98,7 @@ export const api = {
   },
 
   checkQuiz: async (id, prompt_lang, user_answer) => {
-    const res = await fetch(`${API_URL}/quiz/check`, {
+    const res = await authFetch(`${API_URL}/quiz/check`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, prompt_lang, user_answer }),
@@ -81,13 +108,13 @@ export const api = {
   },
 
   getGroups: async () => {
-    const res = await fetch(`${API_URL}/groups`);
+    const res = await authFetch(`${API_URL}/groups`);
     if (!res.ok) throw new Error("Failed to fetch groups");
     return res.json();
   },
 
   createGroup: async (name) => {
-    const res = await fetch(`${API_URL}/groups`, {
+    const res = await authFetch(`${API_URL}/groups`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
@@ -100,7 +127,7 @@ export const api = {
   },
 
   renameGroup: async (id, name) => {
-    const res = await fetch(`${API_URL}/groups/${id}`, {
+    const res = await authFetch(`${API_URL}/groups/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
@@ -110,18 +137,18 @@ export const api = {
   },
 
   deleteGroup: async (id) => {
-    const res = await fetch(`${API_URL}/groups/${id}`, { method: "DELETE" });
+    const res = await authFetch(`${API_URL}/groups/${id}`, { method: "DELETE" });
     if (!res.ok) throw new Error("Failed to delete group");
   },
 
   getGroupWords: async (id) => {
-    const res = await fetch(`${API_URL}/groups/${id}/words`);
+    const res = await authFetch(`${API_URL}/groups/${id}/words`);
     if (!res.ok) throw new Error("Failed to fetch group words");
     return res.json();
   },
 
   addWordsToGroup: async (groupId, wordIds) => {
-    const res = await fetch(`${API_URL}/groups/${groupId}/words`, {
+    const res = await authFetch(`${API_URL}/groups/${groupId}/words`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ word_ids: wordIds }),
@@ -131,10 +158,16 @@ export const api = {
   },
 
   removeWordFromGroup: async (groupId, wordId) => {
-    const res = await fetch(`${API_URL}/groups/${groupId}/words/${wordId}`, {
+    const res = await authFetch(`${API_URL}/groups/${groupId}/words/${wordId}`, {
       method: "DELETE",
     });
     if (!res.ok) throw new Error("Failed to remove word from group");
+  },
+
+  getMe: async () => {
+    const res = await authFetch(`${API_URL}/auth/me`);
+    if (!res.ok) throw new Error("Failed to fetch profile");
+    return res.json();
   },
 };
 
