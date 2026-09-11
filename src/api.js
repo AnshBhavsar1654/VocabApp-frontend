@@ -48,6 +48,28 @@ export const api = {
     return res.json();
   },
 
+  getQuizSession: async (size = 10) => {
+    const res = await fetch(`${API_URL}/quiz/session?size=${size}`);
+    if (!res.ok) {
+      const d = await res.json().catch(()=>({}));
+      throw new Error(d.detail || "Failed to fetch quiz session");
+    }
+    return res.json();
+  },
+
+  recordQuizResult: async ({ word_id, is_correct, self_assessment, typed_answer, prompt_lang }) => {
+    const res = await fetch(`${API_URL}/quiz/record`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ word_id, is_correct, self_assessment, typed_answer, prompt_lang }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(()=>({}));
+      throw new Error(d.detail || "Failed to record result");
+    }
+    return res.json().catch(()=>({}));
+  },
+
   checkQuiz: async (id, prompt_lang, user_answer) => {
     const res = await fetch(`${API_URL}/quiz/check`, {
       method: "POST",

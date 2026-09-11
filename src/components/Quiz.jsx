@@ -1,29 +1,36 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { api, playAudioWithBuffer } from '../api';
-import { Volume2, Loader2, ArrowRight, CheckCircle, XCircle, Sparkles } from 'lucide-react';
+import { Volume2, Loader2, ArrowRight, CheckCircle, XCircle, Sparkles, Keyboard, RotateCcw, BookOpen, Trophy } from 'lucide-react';
 
 function burstColors() { return ['#F5A623', '#15946A', '#2EDB8F', '#FFC84A']; }
 
-export default function Quiz() {
+export default function Quiz({ onExit, onNeedWords }) {
+  const shouldReduce = useReducedMotion();
+  const [sessionSize, setSessionSize] = useState(10);
+  const [session, setSession] = useState(null); // {questions:[], size}
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [results, setResults] = useState([]); // array of {correct, self}
   const [answer, setAnswer] = useState('');
   const [result, setResult] = useState(null);
-  const [showConfetti, setShowConfetti] = useState(false);
-  const shouldReduce = useReducedMotion();
   const [flipped, setFlipped] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
-  const [nextLoading, setNextLoading] = useState(false);
+  const [sessionLoading, setSessionLoading] = useState(false);
+  const [feedbackAnim, setFeedbackAnim] = useState(null); // 'correct' | 'incorrect'
+  const [sessionError, setSessionError] = useState(null);
+  const inputRef = useRef(null);
 
-  const { data: question, isLoading, isFetching, error, refetch } = useQuery({
-    queryKey: ['quizNext'],
-    queryFn: api.getQuizNext,
-    staleTime: 0,
-    gcTime: 60_000,
-    refetchOnWindowFocus: false,
-  });
+  // need words count for guard (reuse getWords)
+  const { data: words = [] } = useQuery({ queryKey: ['words'], queryFn: api.getWords, staleTime: 60_000 });
+  const wordsCount = words.length;
+  const colors = burstColors();
 
-  // Persist quiz stats for header streak
+  const currentQuestion = session?.questions?.[currentIndex] || null;
+  const isLast = session ? currentIndex === session.size - 1 : false;
+  const progress = session ? ((currentIndex + (result ? 1 : 0)) / session.size) * 100 : 0;
+
   const bumpStreak = (correct) => {
     try {
       const raw = JSON.parse(localStorage.getItem('vocabapp-quiz-stats') || '{"correct":0,"streak":0,"total":0}');
@@ -37,8 +44,13 @@ export default function Quiz() {
     onSuccess: async (res) => {
       setResult(res);
       setFlipped(true);
-      bumpStreak(res.correct);
-      if (res.correct && res.audio_url) {
+      const isCorrect = res.correct;
+      setFeedbackAnim(isCorrect ? 'correct' : 'incorrect');
+      setTimeout(() => setFeedbackAnim(null), 600);
+      bumpStreak(isCorrect);
+      // record typed check immediately (self pending until Got/Missed)
+      try { await api.recordQuizResult({ word_id: currentQuestion.id, is_correct: isCorrect, self_assessment: null, typed_answer: answer, prompt_lang: currentQuestion.prompt_lang }); } catch {}
+      if (isCorrect && res.audio_url) {
         setAudioLoading(true);
         try { await playAudioWithBuffer(res.audio_url); } catch {} finally { setAudioLoading(false); }
         setShowConfetti(true);
@@ -47,143 +59,252 @@ export default function Quiz() {
     },
   });
 
-  const loadNext = async () => { if (nextLoading) return; setNextLoading(true); setResult(null); setAnswer(''); setFlipped(false); try { await refetch(); } finally { setNextLoading(false); } };
+  const startSession = async () => {
+    const size = Math.min(20, Math.max(1, parseInt(sessionSize, 10) || 10));
+    if (size > 20) return;
+    if (wordsCount < 10) return;
+    setSessionLoading(true);
+    setSessionError(null);
+    try {
+      const data = await api.getQuizSession(size);
+      setSession(data);
+      setCurrentIndex(0);
+      setResults([]);
+      setResult(null);
+      setFlipped(false);
+      setAnswer('');
+      setFeedbackAnim(null);
+    } catch (e) {
+      setSessionError(e.message);
+    } finally {
+      setSessionLoading(false);
+    }
+  };
+
+  const handleCheck = (e) => {
+    e.preventDefault();
+    if (!answer.trim() || !currentQuestion || checkMutation.isPending) return;
+    checkMutation.mutate({ id: currentQuestion.id, prompt_lang: currentQuestion.prompt_lang, user_answer: answer });
+  };
+
+  const handleNextFromResult = () => {
+    if (!results[currentIndex]) {
+      const isCorrect = result?.correct;
+      const nextResults = [...results];
+      nextResults[currentIndex] = { correct: isCorrect, typed: answer };
+      setResults(nextResults);
+      if (isLast) return;
+    }
+    if (isLast) return;
+    setCurrentIndex(i => i + 1);
+    setResult(null);
+    setFlipped(false);
+    setAnswer('');
+    setFeedbackAnim(null);
+  };
 
   const handlePlay = async (url) => {
     if (!url || audioLoading) return;
     setAudioLoading(true);
     try { await playAudioWithBuffer(url); } catch {} finally { setAudioLoading(false); }
   };
-  const handleCheck = (e) => {
-    e.preventDefault();
-    if (!answer.trim() || !question) return;
-    checkMutation.mutate({ id: question.id, prompt_lang: question.prompt_lang, user_answer: answer });
-  };
 
-  const pendingAudio = question && !question.audio_url;
+  const handleFlip = useCallback(() => {
+    if (!currentQuestion || checkMutation.isPending) return;
+    // if input focused, Space should type space, not flip — handled in keydown guard
+    setFlipped(v => !v);
+  }, [currentQuestion, checkMutation.isPending]);
 
-  if (isLoading) {
+  // Keyboard: Space flip/listen, Enter submit/advance, with visible hint
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!session) return;
+      const tag = document.activeElement?.tagName;
+      const isTyping = tag === 'INPUT' || tag === 'TEXTAREA';
+      if (e.code === 'Space') {
+        if (isTyping && !result && !flipped) return;
+        e.preventDefault();
+        if (!flipped && !result) handleFlip();
+        else if (currentQuestion?.audio_url) handlePlay(currentQuestion.audio_url);
+      }
+      if (e.key === 'Enter') {
+        if (!result && answer.trim()) { e.preventDefault(); handleCheck(e); }
+        else if (result) { e.preventDefault(); handleNextFromResult(); }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, flipped, result, answer, currentQuestion]);
+
+  const sessionDone = session && results.length === session.size && results.every(r => r !== undefined);
+  const correctCount = results.filter(r => r?.correct).length;
+
+  // Guard: less than 10 words
+  if (wordsCount < 10) {
     return (
-      <div className="card">
-        <div className="skeleton" style={{ height: 12, width: '40%', margin: '0 auto 1rem' }} />
-        <div className="skeleton" style={{ height: 56, width: '70%', margin: '0 auto 1.25rem', borderRadius: 'var(--radius-md)' }} />
-        <div className="skeleton" style={{ height: 44, borderRadius: 'var(--radius-pill)' }} />
+      <div className="card" style={{ textAlign: 'center' }}>
+        <div className="empty-backpack" style={{ marginBottom: '0.75rem' }}><BookOpen size={28} /></div>
+        <h3 style={{ fontFamily: 'var(--font-display)' }}>Need more words</h3>
+        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', margin: '0.5rem 0 1rem' }}>
+          Quiz needs at least <strong>10 words</strong> for a proper session. You have <strong>{wordsCount}</strong>.
+        </p>
+        <p className="hint" style={{ fontSize: '0.82rem', marginBottom: '1rem' }}>Add {10 - wordsCount} more to unlock the immersive flip session.</p>
+        {onNeedWords ? (
+          <button onClick={onNeedWords} className="btn-primary" style={{ maxWidth: 240, margin: '0 auto' }}><Sparkles size={16} /> Add words</button>
+        ) : (
+          <p className="hint">Go to Add Word to add more.</p>
+        )}
       </div>
     );
   }
 
-  if (error && !question) {
+  // Setup screen: ask # questions
+  if (!session) {
     return (
       <div className="card" style={{ textAlign: 'center' }}>
         <div className="empty-backpack" style={{ marginBottom: '0.75rem' }}><Sparkles size={28} /></div>
-        <h3 style={{ fontFamily: 'var(--font-display)' }}>Noch keine Karten</h3>
-        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>{error.message}</p>
-        <p className="hint" style={{ fontSize: '0.82rem', marginBottom: '1rem' }}>Add a few words first — then quiz starts.</p>
-        <button onClick={loadNext} className="btn-primary" style={{ maxWidth: 220, margin: '0 auto' }}>Try Again</button>
+        <h3 style={{ fontFamily: 'var(--font-display)' }}>Start a session</h3>
+        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', margin: '0.5rem 0 1rem' }}>Choose how many cards — max 20. You have {wordsCount} words.</p>
+        <div style={{ display:'flex', gap:'0.4rem', justifyContent:'center', flexWrap:'wrap', marginBottom:'1rem' }}>
+          {[5,10,15,20].map(n => (
+            <button key={n} onClick={()=>setSessionSize(n)} className={`filter-chip ${sessionSize===n?'active':''}`} style={{ cursor:'pointer' }}>{n}</button>
+          ))}
+        </div>
+        <div style={{ display:'flex', gap:'0.5rem', justifyContent:'center', alignItems:'center', marginBottom:'1rem' }}>
+          <label className="input-label" style={{ margin:0 }}>Custom</label>
+          <input type="number" min={1} max={20} value={sessionSize} onChange={e=>setSessionSize(Math.min(20, Math.max(1, parseInt(e.target.value)||1)))} className="text-input" style={{ width:80, padding:'0.5rem' }} />
+          <span className="hint" style={{ fontSize:'0.78rem' }}>max 20</span>
+        </div>
+        {sessionError && <div className="status-msg error">{sessionError}</div>}
+        <button onClick={startSession} disabled={sessionLoading} className="btn-primary" style={{ maxWidth: 240, margin: '0 auto' }}>
+          {sessionLoading ? <Loader2 size={18} className="animate-spin" /> : <span>Start — {sessionSize} cards</span>}
+        </button>
+        <div className="hint" style={{ marginTop:'0.75rem', display:'flex', gap:'0.4rem', justifyContent:'center', alignItems:'center' }}><Keyboard size={14} /> Space to flip · Enter to check</div>
       </div>
     );
   }
 
-  const colors = burstColors();
+  // Summary screen
+  if (sessionDone) {
+    return (
+      <div className="card" style={{ textAlign: 'center', position:'relative', overflow:'hidden' }}>
+        <div className="empty-backpack" style={{ marginBottom:'0.75rem', background:'var(--color-primary-soft)', borderColor:'var(--color-primary)' }}><Trophy size={28} color="var(--color-primary)" /></div>
+        <h3 style={{ fontFamily:'var(--font-display)', fontSize:'1.4rem' }}>Session complete!</h3>
+        <p style={{ fontFamily:'var(--font-display)', fontWeight:800, fontSize:'2rem', margin:'0.5rem 0', color:'var(--color-primary-strong)' }}>{correctCount} / {session.size}</p>
+        <p style={{ color:'var(--color-text-muted)', fontSize:'0.9rem', marginBottom:'1rem' }}>correct · {session.size - correctCount} to review</p>
+        <div style={{ display:'flex', gap:'0.6rem', justifyContent:'center', flexWrap:'wrap' }}>
+          <button onClick={()=>{ setSession(null); setResults([]); }} className="btn-primary" style={{ width:'auto', padding:'0.6rem 1.25rem' }}><RotateCcw size={16}/> New session</button>
+          {onExit && <button onClick={onExit} className="btn-primary-style" style={{ background:'var(--color-surface)', color:'var(--color-text)', borderColor:'var(--color-border)' }}>Exit quiz</button>}
+        </div>
+        <div style={{ marginTop:'1rem', display:'flex', gap:'0.4rem', justifyContent:'center', flexWrap:'wrap' }}>
+          {results.map((r,i)=>(
+            <span key={i} className="group-badge" style={{ background: r?.correct ? 'var(--color-success-soft)' : 'var(--color-danger-soft)', borderColor: r?.correct ? 'var(--color-primary)' : 'var(--color-danger)' }}>{i+1}</span>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const pendingAudio = currentQuestion && !currentQuestion.audio_url;
 
   return (
-    <div className="card quiz-flip" style={{ position: 'relative', overflow: showConfetti ? 'visible' : 'hidden' }}>
-      {/* Confetti burst */}
+    <div className={`card quiz-immersive ${feedbackAnim ? `feedback-${feedbackAnim}` : ''}`} style={{ position:'relative', overflow: showConfetti ? 'visible' : 'hidden' }}>
+      {/* slim progress */}
+      <div className="quiz-progress-slim" aria-label={`Card ${currentIndex+1} of ${session.size}`}>
+        <div className="quiz-progress-fill" style={{ width: `${progress}%` }} />
+      </div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.6rem', fontSize:'0.78rem', color:'var(--color-text-muted)', fontWeight:700 }}>
+        <span>Card {currentIndex+1} of {session.size}</span>
+        <span style={{ display:'inline-flex', gap:'0.4rem', alignItems:'center' }}>{correctCount} correct <Trophy size={12} /></span>
+      </div>
+
+      {/* confetti */}
       <AnimatePresence>
         {showConfetti && !shouldReduce && (
-          <motion.div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} initial={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            {[...Array(8)].map((_, i) => (
-              <motion.span
-                key={i}
-                style={{ position: 'absolute', left: '50%', top: '45%', width: 8, height: 8, borderRadius: 999, background: colors[i % colors.length] }}
-                initial={{ x: 0, y: 0, scale: 0 }}
-                animate={{ x: (Math.cos((i / 8) * Math.PI * 2) * 80), y: (Math.sin((i / 8) * Math.PI * 2) * 70 - 20), scale: 1, opacity: 0 }}
-                transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: i * 0.015 }}
-              />
+          <motion.div style={{ position:'absolute', inset:0, pointerEvents:'none', zIndex:5 }} initial={{opacity:1}} exit={{opacity:0}}>
+            {[...Array(8)].map((_,i)=>(
+              <motion.span key={i} style={{ position:'absolute', left:'50%', top:'42%', width:8, height:8, borderRadius:999, background: colors[i%colors.length] }}
+                initial={{x:0,y:0,scale:0}} animate={{x:(Math.cos((i/8)*Math.PI*2)*80), y:(Math.sin((i/8)*Math.PI*2)*70-20), scale:1, opacity:0}} transition={{duration:0.7, ease:[0.22,1,0.36,1], delay:i*0.015}} />
             ))}
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-        {isFetching && !!question && !isLoading && <span style={{ fontSize: '0.7rem', color: 'var(--color-text-faint)', display: 'inline-flex', gap: '0.25rem', alignItems: 'center' }}><Loader2 size={12} className="animate-spin" /> updating…</span>}
-        <p style={{ color: 'var(--color-text-muted)', fontWeight: 700, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '0.25rem' }}>
-          Translate to {question.prompt_lang === 'de' ? 'English' : 'German'}
-        </p>
-
-        {/* Flip card */}
+      {/* flip card */}
+      <div className="flip-card" style={{ perspective: 1100 }} onClick={handleFlip} role="button" tabIndex={0} aria-label="Flip card" onKeyDown={e=>{ if(e.code==='Space'){ e.preventDefault(); handleFlip(); }}}>
         <motion.div
-          style={{ perspective: 1000 }}
+          className="flip-inner"
           animate={shouldReduce ? {} : { rotateY: flipped ? 180 : 0 }}
-          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.45, ease: [0.22,1,0.36,1] }}
+          style={{ transformStyle:'preserve-3d', position:'relative', minHeight: 160 }}
         >
-          <div
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '2.1rem',
-              fontWeight: 800,
-              margin: '0.6rem 0',
-              color: question.prompt_lang === 'de' ? 'var(--color-primary-strong)' : 'var(--color-text)',
-              wordBreak: 'break-word',
-              minHeight: 56,
-              display: 'grid',
-              placeItems: 'center',
-            }}
-          >
-            <span style={{ transform: flipped && !shouldReduce ? 'rotateY(180deg)' : 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-              <span className="flag" aria-hidden="true" title={question.prompt_lang === 'de' ? 'Deutsch' : 'English'}>{question.prompt_lang === 'de' ? <svg viewBox="0 0 5 3" width="22" height="13" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block'}}><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg> : <svg viewBox="0 0 60 30" width="22" height="13" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block'}}><rect width="60" height="30" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="white" strokeWidth="6"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#C8102E" strokeWidth="4"/><path d="M30 0 V30 M0 15 H60" stroke="white" strokeWidth="10"/><path d="M30 0 V30 M0 15 H60" stroke="#C8102E" strokeWidth="6"/></svg>}</span>
-              <span>{flipped && result && !result.correct ? result.correct_answer : question.prompt_word}</span>
-            </span>
+          {/* front */}
+          <div className="flip-face front" style={{ backfaceVisibility:'hidden', position:'absolute', inset:0, display:'grid', placeItems:'center', background:'var(--color-surface-raised)', border:'1px solid var(--color-border)', borderRadius:'var(--radius-lg)', padding:'1.25rem' }}>
+            <div style={{ textAlign:'center' }}>
+              <p style={{ color:'var(--color-text-muted)', fontWeight:700, fontSize:'0.72rem', textTransform:'uppercase', letterSpacing:'0.06em' }}>Translate to {currentQuestion.prompt_lang==='de' ? 'English' : 'German'}</p>
+              <div style={{ fontFamily:'var(--font-display)', fontSize:'2rem', fontWeight:800, margin:'0.6rem 0', color: currentQuestion.prompt_lang==='de' ? 'var(--color-primary-strong)' : 'var(--color-text)', display:'inline-flex', alignItems:'center', gap:'0.4rem', wordBreak:'break-word' }}>
+                <span className="flag" aria-hidden="true">{currentQuestion.prompt_lang==='de' ? <svg viewBox="0 0 5 3" width="22" height="13" style={{borderRadius:2, border:'1px solid var(--color-border)'}}><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg> : <svg viewBox="0 0 60 30" width="22" height="13" style={{borderRadius:2, border:'1px solid var(--color-border)'}}><rect width="60" height="30" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="white" strokeWidth="6"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#C8102E" strokeWidth="4"/><path d="M30 0 V30 M0 15 H60" stroke="white" strokeWidth="10"/><path d="M30 0 V30 M0 15 H60" stroke="#C8102E" strokeWidth="6"/></svg>}</span>
+                <span>{currentQuestion.prompt_word}</span>
+              </div>
+              <p style={{ fontSize:'0.72rem', color:'var(--color-text-faint)', marginTop:'0.4rem' }}>{flipped ? '' : 'Tap card or press Space to reveal'}</p>
+            </div>
+          </div>
+          {/* back */}
+          <div className="flip-face back" style={{ backfaceVisibility:'hidden', position:'absolute', inset:0, transform:'rotateY(180deg)', display:'grid', placeItems:'center', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:'var(--radius-lg)', padding:'1.25rem' }}>
+            <div style={{ textAlign:'center' }}>
+              <p style={{ color:'var(--color-text-muted)', fontWeight:700, fontSize:'0.72rem', textTransform:'uppercase', letterSpacing:'0.06em' }}>Answer</p>
+              <div style={{ fontFamily:'var(--font-display)', fontSize:'1.9rem', fontWeight:800, margin:'0.4rem 0', color:'var(--color-primary-strong)', display:'inline-flex', alignItems:'center', gap:'0.4rem' }}>
+                <span className="flag" aria-hidden="true">{currentQuestion.prompt_lang==='de' ? <svg viewBox="0 0 60 30" width="22" height="13" style={{borderRadius:2, border:'1px solid var(--color-border)'}}><rect width="60" height="30" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="white" strokeWidth="6"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#C8102E" strokeWidth="4"/><path d="M30 0 V30 M0 15 H60" stroke="white" strokeWidth="10"/><path d="M30 0 V30 M0 15 H60" stroke="#C8102E" strokeWidth="6"/></svg> : <svg viewBox="0 0 5 3" width="22" height="13" style={{borderRadius:2, border:'1px solid var(--color-border)'}}><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg>}</span>
+                <span>{result ? result.correct_answer : '—'}</span>
+              </div>
+              <p style={{ fontSize:'0.78rem', color:'var(--color-text-muted)' }}>{currentQuestion.prompt_lang==='de' ? 'English' : 'German'} translation</p>
+            </div>
           </div>
         </motion.div>
-
-        {pendingAudio ? (
-          <span className="pending-pill"><Loader2 size={12} className="animate-spin" /> audio generating…</span>
-        ) : audioLoading ? (
-          <button className="play-large-btn" disabled><Loader2 size={16} className="animate-spin" /> Loading…</button>
-        ) : (
-          <button className="play-large-btn" onClick={() => handlePlay(question.audio_url)} disabled={checkMutation.isPending}><Volume2 size={16} /> Listen</button>
-        )}
       </div>
 
-      {checkMutation.error && !result && <div className="status-msg error" style={{ marginBottom: '0.75rem' }}>{checkMutation.error.message}</div>}
+      <div style={{ display:'flex', justifyContent:'center', margin:'0.9rem 0 0.6rem' }}>
+        {pendingAudio ? <span className="pending-pill"><Loader2 size={12} className="animate-spin" /> audio generating…</span>
+          : audioLoading ? <button className="play-large-btn" disabled><Loader2 size={16} className="animate-spin" /> Loading…</button>
+          : <button className="play-large-btn" onClick={(e)=>{e.stopPropagation(); handlePlay(currentQuestion.audio_url);}}><Volume2 size={16} /> Listen <span className="hint" style={{ fontSize:'0.68rem', fontWeight:600 }}>(Space)</span></button>}
+      </div>
+
+      {checkMutation.error && !result && <div className="status-msg error" style={{ marginBottom:'0.75rem' }}>{checkMutation.error.message}</div>}
 
       {!result ? (
         <form onSubmit={handleCheck}>
           <div className="input-group">
-            <input
-              type="text"
-              className="text-input"
-              value={answer}
-              onChange={e => setAnswer(e.target.value)}
-              placeholder="Type your translation… ä ö ü ß"
-              autoFocus
-              disabled={checkMutation.isPending}
-              autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false}
-            />
+            <input ref={inputRef} type="text" className="text-input" value={answer} onChange={e=>setAnswer(e.target.value)} placeholder="Type your translation… ä ö ü ß" autoFocus disabled={checkMutation.isPending} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
           </div>
-          <motion.button type="submit" className="btn-primary" disabled={checkMutation.isPending || !answer.trim()} whileTap={shouldReduce ? {} : { scale: 0.98 }}>
-            {checkMutation.isPending ? <Loader2 className="animate-spin" size={18} /> : <ArrowRight size={18} />}
-            Check Answer
-          </motion.button>
+          <div style={{ display:'flex', gap:'0.5rem' }}>
+            <motion.button type="submit" className="btn-primary" style={{ flex:1 }} disabled={checkMutation.isPending || !answer.trim()} whileTap={shouldReduce?{}:{scale:0.98}}>
+              {checkMutation.isPending ? <Loader2 className="animate-spin" size={18}/> : <ArrowRight size={18}/>} Check
+            </motion.button>
+            <button type="button" className="btn-primary-style" style={{ background:'var(--color-surface)', color:'var(--color-text)', borderColor:'var(--color-border)' }} onClick={handleFlip}>Flip to reveal</button>
+          </div>
+          <p style={{ fontSize:'0.72rem', color:'var(--color-text-faint)', textAlign:'center', marginTop:'0.5rem' }}>Flip just shows the answer — your score comes from <strong>Check</strong>.</p>
         </form>
       ) : (
-        <motion.div className={`quiz-result ${result.correct ? 'correct' : 'incorrect'}`} initial={shouldReduce ? false : { scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.22, ease: [0.34, 1.56, 0.64, 1] }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.5rem' }}>
-            {result.correct ? <CheckCircle size={40} color="var(--color-primary)" /> : <XCircle size={40} color="var(--color-danger)" />}
+        <motion.div className={`quiz-result ${result.correct ? 'correct' : 'incorrect'}`} initial={shouldReduce?false:{scale:0.96, opacity:0}} animate={{scale:1, opacity:1}} transition={{duration:0.22, ease:[0.34,1.56,0.64,1]}}>
+          <div style={{ display:'flex', justifyContent:'center', marginBottom:'0.5rem' }}>
+            {result.correct ? <CheckCircle size={40} color="var(--color-primary)"/> : <XCircle size={40} color="var(--color-danger)"/>}
           </div>
           <h3>{result.correct ? 'Richtig! 🎉' : 'Fast — not quite'}</h3>
-          {!result.correct && <p>The answer was: <span className="flag" aria-hidden="true" title={question.prompt_lang === 'de' ? 'English' : 'Deutsch'}>{question.prompt_lang === 'de' ? <svg viewBox="0 0 60 30" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="60" height="30" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="white" strokeWidth="6"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#C8102E" strokeWidth="4"/><path d="M30 0 V30 M0 15 H60" stroke="white" strokeWidth="10"/><path d="M30 0 V30 M0 15 H60" stroke="#C8102E" strokeWidth="6"/></svg> : <svg viewBox="0 0 5 3" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg>}</span> <strong>{result.correct_answer}</strong></p>}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '0.6rem', marginTop: '1rem', flexWrap: 'wrap' }}>
-            {!pendingAudio && result.audio_url ? (
-              audioLoading ? <button className="play-large-btn" disabled><Loader2 size={16} className="animate-spin" /> Loading…</button> : <button className="play-large-btn" onClick={() => handlePlay(result.audio_url)}><Volume2 size={16} /> Play Audio</button>
-            ) : pendingAudio ? (
-              <span className="pending-pill"><Loader2 size={12} className="animate-spin" /> audio pending</span>
-            ) : null}
-            <button className="btn-primary" style={{ width: 'auto', padding: '0.6rem 1.25rem' }} onClick={loadNext} disabled={nextLoading || isFetching}>{nextLoading || isFetching ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />} Next</button>
+          {!result.correct && <p>The answer was: <strong>{result.correct_answer}</strong></p>}
+          <p style={{ fontSize:'0.78rem', color:'var(--color-text-muted)', marginTop:'0.4rem' }}>{result.correct ? 'Correct — great recall!' : 'Incorrect — will appear again soon.'}</p>
+          <div style={{ display:'flex', justifyContent:'center', gap:'0.5rem', marginTop:'0.9rem' }}>
+            <button className="btn-primary" style={{ width:'auto', padding:'0.6rem 1.25rem' }} onClick={handleNextFromResult}>Next <ArrowRight size={16}/></button>
           </div>
         </motion.div>
       )}
+
+      <div className="quiz-hint" style={{ display:'flex', gap:'0.6rem', justifyContent:'center', alignItems:'center', marginTop:'1rem', fontSize:'0.68rem', color:'var(--color-text-faint)', flexWrap:'wrap' }}>
+        <span><kbd>Space</kbd> flip / listen</span>
+        <span>·</span>
+        <span><kbd>Enter</kbd> check / next</span>
+        <Keyboard size={12} />
+      </div>
     </div>
   );
 }

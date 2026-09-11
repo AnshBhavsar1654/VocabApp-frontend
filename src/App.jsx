@@ -334,15 +334,7 @@ export default function App() {
                 <X size={18} />
               </button>
             </div>
-            <Quiz />
-            <div className="flex justify-center mt-4">
-              <button
-                className="bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] px-4 py-2 rounded-full font-[var(--font-display)] font-bold cursor-pointer hover:bg-[var(--color-surface-hover)]"
-                onClick={() => setActiveTab("add")}
-              >
-                ← Back to app
-              </button>
-            </div>
+            <Quiz onExit={() => setActiveTab("add")} onNeedWords={() => setActiveTab("add")} />
           </div>
         </div>
       </div>
