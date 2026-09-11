@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { friendlyError } from "../lib/errors";
 import { UserPlus, Mail, Lock, Loader2, Globe } from "lucide-react";
 
 export default function SignupPage() {
@@ -17,14 +18,14 @@ export default function SignupPage() {
     e.preventDefault();
     setError("");
     setSuccess("");
-    if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
+    if (password.length < 6) { setError("Your password must be at least 6 characters long."); return; }
     setLoading(true);
     try {
       await signUp(email.trim(), password);
       setSuccess("Account created. Check your email to confirm, then sign in.");
       setTimeout(()=>navigate("/login"), 1500);
     } catch (err) {
-      setError(err.message || "Failed to sign up");
+      setError(friendlyError(err, "Couldn't create your account. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -36,7 +37,7 @@ export default function SignupPage() {
     try {
       await signInWithGoogle();
     } catch (err) {
-      setError(err.message || "Google sign-in failed");
+      setError(friendlyError(err, "Couldn't start Google sign-in. Please try again."));
       setGoogleLoading(false);
     }
   };

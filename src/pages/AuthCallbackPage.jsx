@@ -19,7 +19,8 @@ export default function AuthCallbackPage() {
 
     const params = new URLSearchParams(window.location.search);
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    // Surface provider errors immediately (e.g. redirect_uri mismatch = dashboard whitelist issue)
+    // Surface identity-provider errors immediately (e.g. a redirect URI that is
+    // not allowlisted in the Supabase dashboard) instead of retrying silently.
     const decodeDeep = (s) => {
       let prev = s;
       for (let i = 0; i < 3; i++) {
@@ -37,8 +38,8 @@ export default function AuthCallbackPage() {
       params.get("error_description") || params.get("error") || hashParams.get("error_description") || hashParams.get("error");
     if (params.get("error") || params.get("error_description") || hashParams.get("error") || hashParams.get("error_description")) {
       const raw = decodeDeep(providerError || "Sign-in failed");
-      // Supabase -> Google token exchange failed server-side; frontend code can't fix it.
-      // Translate into an actionable message.
+      // The Supabase-to-Google token exchange failed server-side, which can only
+      // be resolved through dashboard configuration. Present actionable guidance.
       if (/exchange.*external.*code/i.test(raw)) {
         setError(
           "Google login failed at token exchange (Supabase could not trade the Google code for tokens). " +
@@ -53,12 +54,13 @@ export default function AuthCallbackPage() {
       return undefined;
     }
 
-    // With detectSessionInUrl:true the client auto-exchanges ?code on load.
-    // Do NOT call exchangeCodeForSession manually — a second exchange consumes
-    // the one-time PKCE verifier and throws, which looked like a login loop.
+    // The client exchanges the authorization code automatically on load
+    // (detectSessionInUrl). A manual exchangeCodeForSession call must not be
+    // added here: it would consume the single-use PKCE verifier a second time
+    // and fail, which previously presented as a login loop.
     const finishAuthed = () => {
-      // Best-effort backend sync: persists public.profiles + default group
-      // so the user shows up in Supabase immediately after Google login.
+      // Best-effort backend synchronization: ensures the profile and default
+      // group exist so the account is present in Supabase immediately after login.
       api.getMe().catch(() => {}).finally(() => finish("/"));
     };
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -76,7 +78,7 @@ export default function AuthCallbackPage() {
       attempts += 1;
       if (attempts >= 10) {
         if (!mounted || done) return;
-        setError("No session — redirecting to login...");
+        setError("We couldn't complete the sign-in. Returning to the login page…");
         setTimeout(() => finish("/login?error=no_session"), 1200);
         return;
       }
@@ -100,7 +102,7 @@ export default function AuthCallbackPage() {
               Back to login — try again
             </button>
             <p style={{ color: "var(--color-text-faint)", fontSize: "0.75rem", marginTop: "0.5rem" }}>
-              Tip: never refresh this URL — codes are single-use. Always start fresh from login.
+              Note: authorization codes are single-use. Return to the login page to start a new sign-in attempt.
             </p>
           </>
         ) : (

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { api, playAudioWithBuffer } from '../api';
+import { friendlyError } from '../lib/errors';
 import { Volume2, Loader2, ArrowRight, CheckCircle, XCircle, Sparkles, Keyboard, RotateCcw, BookOpen, Trophy } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -11,20 +12,20 @@ export default function Quiz({ onExit, onNeedWords }) {
   const { user } = useAuth();
   const shouldReduce = useReducedMotion();
   const [sessionSize, setSessionSize] = useState(10);
-  const [session, setSession] = useState(null); // {questions:[], size}
+  const [session, setSession] = useState(null); // Shape: { questions: [], size: number }.
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [results, setResults] = useState([]); // array of {correct, self}
+  const [results, setResults] = useState([]); // Per-question outcomes: { correct: boolean, typed: string }.
   const [answer, setAnswer] = useState('');
   const [result, setResult] = useState(null);
   const [flipped, setFlipped] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
-  const [feedbackAnim, setFeedbackAnim] = useState(null); // 'correct' | 'incorrect'
+  const [feedbackAnim, setFeedbackAnim] = useState(null); // Feedback state: "correct" | "incorrect".
   const [sessionError, setSessionError] = useState(null);
   const inputRef = useRef(null);
 
-  // need words count for guard (reuse getWords)
+  // Word count for the minimum-size guard (served from the shared words cache).
   const { data: words = [] } = useQuery({ queryKey: ['words', user?.id], queryFn: api.getWords, staleTime: 60_000, enabled: !!user });
   const wordsCount = words.length;
   const colors = burstColors();
@@ -50,7 +51,7 @@ export default function Quiz({ onExit, onNeedWords }) {
       setFeedbackAnim(isCorrect ? 'correct' : 'incorrect');
       setTimeout(() => setFeedbackAnim(null), 600);
       bumpStreak(isCorrect);
-      // record typed check immediately (self pending until Got/Missed)
+      // Record the typed answer immediately; self-assessment follows separately.
       try { await api.recordQuizResult({ word_id: currentQuestion.id, is_correct: isCorrect, self_assessment: null, typed_answer: answer, prompt_lang: currentQuestion.prompt_lang }); } catch {}
       if (isCorrect && res.audio_url) {
         setAudioLoading(true);
@@ -77,7 +78,7 @@ export default function Quiz({ onExit, onNeedWords }) {
       setAnswer('');
       setFeedbackAnim(null);
     } catch (e) {
-      setSessionError(e.message);
+      setSessionError(friendlyError(e, "Couldn't start the quiz session. Please try again."));
     } finally {
       setSessionLoading(false);
     }
@@ -113,11 +114,12 @@ export default function Quiz({ onExit, onNeedWords }) {
 
   const handleFlip = useCallback(() => {
     if (!currentQuestion || checkMutation.isPending) return;
-    // if input focused, Space should type space, not flip — handled in keydown guard
+    // Space input while typing is preserved by the keydown guard below.
     setFlipped(v => !v);
   }, [currentQuestion, checkMutation.isPending]);
 
-  // Keyboard: Space flip/listen, Enter submit/advance, with visible hint
+  // Keyboard shortcuts: Space reveals the card or replays audio, Enter submits
+  // the answer or advances. The visible hint below reflects these bindings.
   useEffect(() => {
     const onKey = (e) => {
       if (!session) return;
@@ -142,7 +144,7 @@ export default function Quiz({ onExit, onNeedWords }) {
   const sessionDone = session && results.length === session.size && results.every(r => r !== undefined);
   const correctCount = results.filter(r => r?.correct).length;
 
-  // Guard: less than 10 words
+  // Guard: a session requires a minimum vocabulary of 10 words.
   if (wordsCount < 10) {
     return (
       <div className="card" style={{ textAlign: 'center' }}>
@@ -161,7 +163,7 @@ export default function Quiz({ onExit, onNeedWords }) {
     );
   }
 
-  // Setup screen: ask # questions
+  // Setup screen: session-size selection.
   if (!session) {
     return (
       <div className="card" style={{ textAlign: 'center' }}>
@@ -187,7 +189,7 @@ export default function Quiz({ onExit, onNeedWords }) {
     );
   }
 
-  // Summary screen
+  // Summary screen: session results.
   if (sessionDone) {
     return (
       <div className="card" style={{ textAlign: 'center', position:'relative', overflow:'hidden' }}>
@@ -212,7 +214,7 @@ export default function Quiz({ onExit, onNeedWords }) {
 
   return (
     <div className={`card quiz-immersive ${feedbackAnim ? `feedback-${feedbackAnim}` : ''}`} style={{ position:'relative', overflow: showConfetti ? 'visible' : 'hidden' }}>
-      {/* slim progress */}
+      {/* Session progress indicator */}
       <div className="quiz-progress-slim" aria-label={`Card ${currentIndex+1} of ${session.size}`}>
         <div className="quiz-progress-fill" style={{ width: `${progress}%` }} />
       </div>
@@ -221,7 +223,7 @@ export default function Quiz({ onExit, onNeedWords }) {
         <span style={{ display:'inline-flex', gap:'0.4rem', alignItems:'center' }}>{correctCount} correct <Trophy size={12} /></span>
       </div>
 
-      {/* confetti */}
+      {/* Celebration effect for correct answers */}
       <AnimatePresence>
         {showConfetti && !shouldReduce && (
           <motion.div style={{ position:'absolute', inset:0, pointerEvents:'none', zIndex:5 }} initial={{opacity:1}} exit={{opacity:0}}>
@@ -233,7 +235,7 @@ export default function Quiz({ onExit, onNeedWords }) {
         )}
       </AnimatePresence>
 
-      {/* flip card */}
+      {/* Interactive flashcard */}
       <div className="flip-card" style={{ perspective: 1100 }} onClick={handleFlip} role="button" tabIndex={0} aria-label="Flip card" onKeyDown={e=>{ if(e.code==='Space'){ e.preventDefault(); handleFlip(); }}}>
         <motion.div
           className="flip-inner"
@@ -241,7 +243,7 @@ export default function Quiz({ onExit, onNeedWords }) {
           transition={{ duration: 0.45, ease: [0.22,1,0.36,1] }}
           style={{ transformStyle:'preserve-3d', position:'relative', minHeight: 160 }}
         >
-          {/* front */}
+          {/* Card front: translation prompt */}
           <div className="flip-face front" style={{ backfaceVisibility:'hidden', position:'absolute', inset:0, display:'grid', placeItems:'center', background:'var(--color-surface-raised)', border:'1px solid var(--color-border)', borderRadius:'var(--radius-lg)', padding:'1.25rem' }}>
             <div style={{ textAlign:'center' }}>
               <p style={{ color:'var(--color-text-muted)', fontWeight:700, fontSize:'0.72rem', textTransform:'uppercase', letterSpacing:'0.06em' }}>Translate to {currentQuestion.prompt_lang==='de' ? 'English' : 'German'}</p>
@@ -252,7 +254,7 @@ export default function Quiz({ onExit, onNeedWords }) {
               <p style={{ fontSize:'0.72rem', color:'var(--color-text-faint)', marginTop:'0.4rem' }}>{flipped ? '' : 'Tap card or press Space to reveal'}</p>
             </div>
           </div>
-          {/* back */}
+          {/* Card back: correct answer */}
           <div className="flip-face back" style={{ backfaceVisibility:'hidden', position:'absolute', inset:0, transform:'rotateY(180deg)', display:'grid', placeItems:'center', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:'var(--radius-lg)', padding:'1.25rem' }}>
             <div style={{ textAlign:'center' }}>
               <p style={{ color:'var(--color-text-muted)', fontWeight:700, fontSize:'0.72rem', textTransform:'uppercase', letterSpacing:'0.06em' }}>Answer</p>
@@ -272,7 +274,7 @@ export default function Quiz({ onExit, onNeedWords }) {
           : <button className="play-large-btn" onClick={(e)=>{e.stopPropagation(); handlePlay(currentQuestion.audio_url);}}><Volume2 size={16} /> Listen <span className="hint" style={{ fontSize:'0.68rem', fontWeight:600 }}>(Space)</span></button>}
       </div>
 
-      {checkMutation.error && !result && <div className="status-msg error" style={{ marginBottom:'0.75rem' }}>{checkMutation.error.message}</div>}
+      {checkMutation.error && !result && <div className="status-msg error" style={{ marginBottom:'0.75rem' }}>{friendlyError(checkMutation.error, "Couldn't check that answer. Please try again.")}</div>}
 
       {!result ? (
         <form onSubmit={handleCheck}>

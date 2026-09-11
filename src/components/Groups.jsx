@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { api, playAudioWithBuffer } from '../api';
+import { friendlyError } from '../lib/errors';
 import { Layers, Plus, Trash2, Pencil, Check, X, Volume2, Search, Loader2, FolderOpen, Users, Backpack, MoreHorizontal } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -13,7 +14,7 @@ export default function Groups() {
   const [showAddWords, setShowAddWords] = useState(false);
   const [addWordsSearch, setAddWordsSearch] = useState('');
 
-  // popups
+  // Dialog visibility state.
   const [showCreate, setShowCreate] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [showEdit, setShowEdit] = useState(false);
@@ -21,6 +22,8 @@ export default function Groups() {
   const [editingName, setEditingName] = useState('');
   const [audioLoadingId, setAudioLoadingId] = useState(null);
   const [openActionsId, setOpenActionsId] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const { data: groups = [], isLoading, isFetching: groupsFetching, error: groupsError } = useQuery({ queryKey: ['groups', user?.id], queryFn: api.getGroups, staleTime: 60_000, enabled: !!user });
   const { data: allWords = [] } = useQuery({ queryKey: ['words', user?.id], queryFn: api.getWords, staleTime: 60_000, enabled: !!user });
@@ -34,7 +37,7 @@ export default function Groups() {
 
   React.useEffect(() => { if (!selectedGroupId && groups.length > 0) setSelectedGroupId(groups[0].id); }, [groups, selectedGroupId]);
   const selectedGroup = groups.find(g => g.id === selectedGroupId);
-  const error = groupsError?.message || null;
+  const error = groupsError ? friendlyError(groupsError, "Couldn't load your groups. Please check your connection and try again.") : null;
 
   const wordsNotInGroup = useMemo(() => {
     const ids = new Set(groupWords.map(w => w.id));
@@ -56,12 +59,27 @@ export default function Groups() {
   const addWordsMutation = useMutation({ mutationFn: ({ groupId, wordIds }) => api.addWordsToGroup(groupId, wordIds), onSuccess: (_, { groupId }) => { queryClient.invalidateQueries({ queryKey: ['groupWords', user?.id, groupId] }); queryClient.invalidateQueries({ queryKey: ['groups', user?.id] }); queryClient.invalidateQueries({ queryKey: ['words', user?.id] }); setShowAddWords(false); setAddWordsSearch(''); } });
   const removeWordMutation = useMutation({ mutationFn: ({ groupId, wordId }) => api.removeWordFromGroup(groupId, wordId), onSuccess: (_, { groupId }) => { queryClient.invalidateQueries({ queryKey: ['groupWords', user?.id, groupId] }); queryClient.invalidateQueries({ queryKey: ['groups', user?.id] }); } });
 
-  const handleCreate = () => { const n = newGroupName.trim(); if (!n) return; createGroupMutation.mutate(n, { onError: e => alert(e.message) }); };
-  const handleRename = () => { const n = editingName.trim(); if (!n || !editTarget) return; renameGroupMutation.mutate({ groupId: editTarget.id, name: n }, { onError: e => alert(e.message) }); };
-  const handleDelete = () => { if (!editTarget) return; if (!confirm('Delete group? Words move to Ungrouped.')) return; deleteGroupMutation.mutate(editTarget.id, { onError: e => alert(e.message) }); };
-  const handleAdd = (ids) => { if (!selectedGroupId || !ids.length) return; addWordsMutation.mutate({ groupId: selectedGroupId, wordIds: ids }, { onError: e => alert(e.message) }); };
-  const handleRemove = (wid) => { if (!selectedGroupId) return; removeWordMutation.mutate({ groupId: selectedGroupId, wordId: wid }, { onError: e => alert(e.message) }); };
+  const handleCreate = () => { const n = newGroupName.trim(); if (!n) return; setActionError(null); createGroupMutation.mutate(n, { onError: e => setActionError(friendlyError(e, "Couldn't create that group. Please try again.")) }); };
+  const handleRename = () => { const n = editingName.trim(); if (!n || !editTarget) return; setActionError(null); renameGroupMutation.mutate({ groupId: editTarget.id, name: n }, { onError: e => setActionError(friendlyError(e, "Couldn't rename that group. Please try again.")) }); };
+  const handleDelete = () => {
+    if (!editTarget) return;
+    if (!confirmingDelete) {
+      // Two-step confirmation: first click arms, second click executes.
+      setConfirmingDelete(true);
+      return;
+    }
+    setConfirmingDelete(false);
+    setActionError(null);
+    deleteGroupMutation.mutate(editTarget.id, { onError: e => setActionError(friendlyError(e, "Couldn't delete that group. Please try again.")) });
+  };
+  const handleAdd = (ids) => { if (!selectedGroupId || !ids.length) return; setActionError(null); addWordsMutation.mutate({ groupId: selectedGroupId, wordIds: ids }, { onError: e => setActionError(friendlyError(e, "Couldn't add those words. Please try again.")) }); };
+  const handleRemove = (wid) => { if (!selectedGroupId) return; setActionError(null); removeWordMutation.mutate({ groupId: selectedGroupId, wordId: wid }, { onError: e => setActionError(friendlyError(e, "Couldn't remove that word. Please try again.")) }); };
   const handlePlay = async (url, id) => { if (!url || audioLoadingId) return; setAudioLoadingId(id); try { await playAudioWithBuffer(url); } catch (e) { console.warn('Audio failed', e); } finally { setAudioLoadingId(null); } };
+
+  React.useEffect(() => {
+    if (showEdit) return;
+    setConfirmingDelete(false);
+  }, [showEdit]);
 
   React.useEffect(() => {
     if (openActionsId === null) return;
@@ -78,9 +96,10 @@ export default function Groups() {
       return;
     }
     setSelectedGroupId(g.id);
-    // animate feedback already via motion; open edit only on second click for non-default
+    // Selection feedback is handled by the motion animation. The edit dialog
+    // opens only on a second click for custom groups (handled above); the
+    // first click selects without opening a dialog.
     if (g.is_default) return;
-    // first click just selects; second click opens edit (handled above). No auto-popup on first.
   };
 
   const openEditFor = (g) => {
@@ -100,13 +119,19 @@ export default function Groups() {
 
   return (
     <div className="groups-page">
-      {/* Top strip — between navbar/stat and words */}
+      {/* Group selection strip */}
       <div className="groups-strip-wrapper card">
         <div className="groups-strip-header">
           <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>Groups {groupsFetching && !isLoading && <Loader2 size={14} className="animate-spin" />}</h2>
           <button className="btn-primary-style btn-sm" onClick={() => { setNewGroupName(''); setShowCreate(true); }}><Plus size={14} /> New group</button>
         </div>
         {error && <div className="status-msg error" style={{ fontSize: '0.82rem', marginBottom: '0.6rem' }}>{error}</div>}
+        {actionError && (
+          <div className="status-msg error" style={{ fontSize: '0.82rem', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ flex: 1 }}>{actionError}</span>
+            <button className="btn-icon small" onClick={() => setActionError(null)} aria-label="Dismiss"><X size={14} /></button>
+          </div>
+        )}
         <div className="groups-strip" role="tablist" aria-label="Groups">
           {[...groups].sort((a,b)=> Number(a.is_default) - Number(b.is_default) || a.name.localeCompare(b.name)).map(g => {
             const active = selectedGroupId === g.id;
@@ -186,7 +211,7 @@ export default function Groups() {
         )}
       </div>
 
-      {/* Create popup */}
+      {/* Create-group dialog */}
       <AnimatePresence>
         {showCreate && (
           <motion.div className="modal-overlay" onClick={() => setShowCreate(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -206,7 +231,7 @@ export default function Groups() {
         )}
       </AnimatePresence>
 
-      {/* Edit popup */}
+      {/* Edit-group dialog */}
       <AnimatePresence>
         {showEdit && editTarget && (
           <motion.div className="modal-overlay" onClick={() => setShowEdit(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -218,7 +243,7 @@ export default function Groups() {
                 <input id="edit-group-input" type="text" className="text-input" value={editingName} onChange={e => setEditingName(e.target.value)} onKeyDown={e => { if (e.key==='Enter') handleRename(); if (e.key==='Escape') setShowEdit(false); }} autoFocus disabled={renameGroupMutation.isPending} />
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'space-between', flexWrap:'wrap' }}>
-                <button className="btn-icon danger" style={{ width:'auto', padding:'0 0.9rem', borderRadius:'var(--radius-md)', borderColor:'var(--color-danger)' }} onClick={handleDelete} disabled={deleteGroupMutation.isPending}><Trash2 size={14} /> Delete group</button>
+                <button className="btn-icon danger" style={{ width:'auto', padding:'0 0.9rem', borderRadius:'var(--radius-md)', borderColor:'var(--color-danger)' }} onClick={handleDelete} disabled={deleteGroupMutation.isPending} title={confirmingDelete ? 'Click again to permanently delete this group' : 'Delete this group'}><Trash2 size={14} /> {confirmingDelete ? 'Confirm delete' : 'Delete group'}</button>
                 <div style={{ display:'flex', gap:'0.5rem' }}>
                   <button className="btn-icon" style={{ width:'auto', padding:'0 0.9rem', borderRadius:'var(--radius-md)' }} onClick={() => setShowEdit(false)}>Cancel</button>
                   <button className="btn-primary-style" onClick={handleRename} disabled={renameGroupMutation.isPending || !editingName.trim()}>{renameGroupMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save</button>

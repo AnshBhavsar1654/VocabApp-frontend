@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { friendlyError } from "../lib/errors";
 import { LogIn, Mail, Lock, Loader2, Globe } from "lucide-react";
 
 export default function LoginPage() {
@@ -22,7 +23,7 @@ export default function LoginPage() {
       await signIn(email.trim(), password);
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err.message || "Failed to sign in");
+      setError(friendlyError(err, "Couldn't sign you in. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -34,7 +35,7 @@ export default function LoginPage() {
     try {
       await signInWithGoogle();
     } catch (err) {
-      setError(err.message || "Google sign-in failed");
+      setError(friendlyError(err, "Couldn't start Google sign-in. Please try again."));
       setGoogleLoading(false);
     }
   };

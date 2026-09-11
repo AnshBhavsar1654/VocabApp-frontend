@@ -1,8 +1,9 @@
 import { supabase } from "./lib/supabase";
 
-// MODE-driven API URL: single toggle VITE_MODE=dev -> localhost, else -> prod (render)
-// Hardened: if a dev build leaks to a non-localhost host (e.g. Vercel built with
-// committed VITE_MODE=dev), fall back to the prod URL instead of localhost.
+// Backend base URL selected by VITE_MODE ("dev" for localhost, otherwise production).
+// Safeguard: when served from a non-localhost host, never target localhost even if
+// the build was produced with development defaults (e.g. a production deployment
+// built with VITE_MODE=dev).
 const MODE = (import.meta.env.VITE_MODE || import.meta.env.MODE || "dev").toLowerCase();
 const PROD_URL = import.meta.env.VITE_API_URL_PROD || "https://vocabapp-backend.onrender.com";
 const DEV_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
@@ -27,10 +28,8 @@ async function authFetch(url, options = {}) {
   const headers = await authHeaders();
   const mergedHeaders = { ...(options.headers || {}), ...headers };
   const res = await fetch(url, { ...options, headers: mergedHeaders });
-  if (res.status === 401) {
-    // let caller handle; optionally sign out
-    // await supabase.auth.signOut(); // not auto to avoid loop
-  }
+  // Authentication failures are surfaced to the caller. Automatic sign-out is
+  // intentionally disabled here to avoid redirect loops during token refresh.
   return res;
 }
 
@@ -189,7 +188,7 @@ export const playAudioWithBuffer = (url) => {
       const fail = (e) => { if (!settled) { settled = true; reject(e); } };
       audio.addEventListener('playing', done, { once: true });
       audio.addEventListener('error', fail, { once: true });
-      // fallback — some browsers don't fire playing reliably
+      // Safety net: resolve even if the browser omits playback events.
       setTimeout(done, 3000);
       audio.play().catch(fail);
     };

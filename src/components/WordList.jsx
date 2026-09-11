@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, useReducedMotion } from 'framer-motion';
 import { api, playAudioWithBuffer } from '../api';
+import { friendlyError } from '../lib/errors';
 import { Volume2, Trash2, Loader2, RefreshCw, Pencil, Check, X, Search, Layers, Backpack, Music2, MoreHorizontal, Filter } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -18,6 +19,7 @@ export default function WordList() {
   const [activeGroupFilter, setActiveGroupFilter] = useState('all');
   const [showPendingOnly, setShowPendingOnly] = useState(false);
   const [openActionsId, setOpenActionsId] = useState(null);
+  const [actionError, setActionError] = useState(null);
 
   const { data: words = [], isLoading, isFetching, error: queryError, refetch } = useQuery({
     queryKey: ['words', user?.id],
@@ -27,7 +29,7 @@ export default function WordList() {
   });
   const { data: groups = [] } = useQuery({ queryKey: ['groups', user?.id], queryFn: api.getGroups, staleTime: 60_000, enabled: !!user });
 
-  const error = queryError?.message || null;
+  const error = queryError ? friendlyError(queryError, "Couldn't load your words. Please check your connection and try again.") : null;
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteWord(id),
@@ -57,7 +59,8 @@ export default function WordList() {
     },
   });
 
-  // derived counts (from words, not server word_count) — Ungrouped = not in any group (groups.length===0)
+  // Filter-chip counts derived from the loaded words (rather than the server
+  // word_count). "Ungrouped" counts words assigned to no group (groups.length === 0).
   const pendingCount = useMemo(() => words.filter(w => !w.audio_url).length, [words]);
   const chipCounts = useMemo(() => {
     const m = new Map();
@@ -87,12 +90,12 @@ export default function WordList() {
   const hasActiveFilter = activeGroupFilter !== 'all' || showPendingOnly || search.trim() !== '';
   const clearFilters = () => { setActiveGroupFilter('all'); setShowPendingOnly(false); setSearch(''); };
 
-  const handleDelete = (id) => deleteMutation.mutate(id, { onError: (err) => alert('Failed to delete: ' + err.message) });
+  const handleDelete = (id) => { setActionError(null); deleteMutation.mutate(id, { onError: (err) => setActionError(friendlyError(err, "Couldn't delete that word. Please try again.")) }); };
   const startEdit = (word) => { setEditingId(word.id); setEditEnglish(word.english_word); setEditGerman(word.german_word); setOpenActionsId(null); };
   const cancelEdit = () => { setEditingId(null); setEditEnglish(''); setEditGerman(''); };
   const saveEdit = (id) => {
     if (!editEnglish.trim() || !editGerman.trim()) return;
-    updateMutation.mutate({ id, data: { english_word: editEnglish.trim(), german_word: editGerman.trim() } }, { onError: (err) => alert('Failed to update: ' + err.message) });
+    updateMutation.mutate({ id, data: { english_word: editEnglish.trim(), german_word: editGerman.trim() } }, { onError: (err) => setActionError(friendlyError(err, "Couldn't save your changes. Please try again.")) });
   };
 
   React.useEffect(() => {
@@ -116,7 +119,7 @@ export default function WordList() {
     const word = words.find(w => w.id === wordId);
     if (!word) return;
     const isInGroup = word.groups.some(g => g.id === groupId);
-    toggleGroupMutation.mutate({ wordId, groupId, isInGroup }, { onError: (err) => alert('Failed: ' + err.message) });
+    toggleGroupMutation.mutate({ wordId, groupId, isInGroup }, { onError: (err) => setActionError(friendlyError(err, "Couldn't update the group assignment. Please try again.")) });
   };
 
   const handlePlay = async (url, id) => {
@@ -149,6 +152,12 @@ export default function WordList() {
       </div>
 
       {error && <div className="status-msg error">{error}</div>}
+      {actionError && (
+        <div className="status-msg error" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ flex: 1 }}>{actionError}</span>
+          <button className="btn-icon small" onClick={() => setActionError(null)} aria-label="Dismiss"><X size={14} /></button>
+        </div>
+      )}
 
       {words.length > 0 && (
         <>
@@ -240,7 +249,7 @@ export default function WordList() {
                 </>
               ) : (
                 <>
-                  {/* top-right speaker */}
+                  {/* Pronunciation control */}
                   <div className="tile-top">
                     <div className="tile-pair">
                       <span className="word-lang"><span className="flag" aria-hidden="true" title="English"><svg viewBox="0 0 60 30" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="60" height="30" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="white" strokeWidth="6"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#C8102E" strokeWidth="4"/><path d="M30 0 V30 M0 15 H60" stroke="white" strokeWidth="10"/><path d="M30 0 V30 M0 15 H60" stroke="#C8102E" strokeWidth="6"/></svg></span> {word.english_word}</span>
@@ -267,7 +276,7 @@ export default function WordList() {
                     </div>
                   )}
 
-                  {/* hover/focus actions — pointer devices */}
+                  {/* Card actions for pointer devices (hover/focus) */}
                   <div className={`tile-actions ${isOpen ? 'open' : ''}`}>
                     <div className="group-dropdown-wrapper">
                       <button className="btn-icon small" onClick={(e) => { e.stopPropagation(); setGroupDropdownWordId(groupDropdownWordId === word.id ? null : word.id); }} title="Manage groups" disabled={toggleGroupMutation.isPending}><Layers size={14} /></button>
@@ -291,7 +300,7 @@ export default function WordList() {
                     <button className="btn-icon small danger" onClick={() => handleDelete(word.id)} title="Delete" disabled={deleteMutation.isPending || audioLoadingId !== null}>{(deleteMutation.isPending && deleteMutation.variables === word.id) ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}</button>
                   </div>
 
-                  {/* touch: always-visible ... button */}
+                  {/* Overflow menu for touch devices */}
                   <button
                     className="more-btn"
                     onClick={(e) => { e.stopPropagation(); setOpenActionsId(isOpen ? null : word.id); }}

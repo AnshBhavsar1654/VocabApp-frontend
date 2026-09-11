@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import { Shield, Mail, User, Check, X, Loader2, Globe } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { friendlyError } from "../lib/errors";
 
 export default function OAuthConsentPage() {
   const [searchParams] = useSearchParams();
@@ -10,7 +11,7 @@ export default function OAuthConsentPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Support ?client_id, ?scope, ?redirect_uri for generic OAuth, default to WortSchatz Google
+  // Optional generic OAuth parameters (?client_id, ?scope, ?redirect_uri); defaults target WortSchatz Google sign-in.
   const clientName = searchParams.get("client_name") || "WortSchatz";
   const scope = searchParams.get("scope") || "email profile openid";
   const redirectUri = searchParams.get("redirect_uri") || searchParams.get("redirect_to");
@@ -27,7 +28,7 @@ export default function OAuthConsentPage() {
     setLoading(true);
     try {
       if (isAuthenticated && user) {
-        // Already signed in — just redirect
+        // An existing session requires no further authorization; redirect directly.
         if (redirectUri) {
           window.location.href = redirectUri;
         } else {
@@ -35,19 +36,18 @@ export default function OAuthConsentPage() {
         }
         return;
       }
-      // Not signed in — trigger Supabase Google OAuth
-      // For custom redirect_uri support, we pass it through if it's our own domain
+      // No active session: initiate Supabase Google OAuth, which redirects away
+      // from this page (the loading state is retained until navigation occurs).
       await signInWithGoogle();
-      // supabase will redirect, loading stays true
     } catch (e) {
-      setError(e.message || "Authorization failed");
+      setError(friendlyError(e, "Authorization didn't go through. Please try again."));
       setLoading(false);
     }
   };
 
   const handleDeny = () => {
     if (redirectUri) {
-      // OAuth error redirect: access_denied
+      // Return an OAuth-compliant access_denied error to the requesting client.
       const sep = redirectUri.includes("?") ? "&" : "?";
       window.location.href = `${redirectUri}${sep}error=access_denied&error_description=User+denied+access`;
     } else {
@@ -57,7 +57,7 @@ export default function OAuthConsentPage() {
 
   return (
     <div className="min-h-dvh bg-(--color-bg) flex flex-col">
-      {/* top brand bar */}
+      {/* Brand header */}
       <div className="border-b border-(--color-border) bg-(--color-surface) px-4 py-3">
         <div className="max-w-215 mx-auto flex items-center gap-2">
           <Link to="/" className="font-(--font-display) text-[1.15rem] font-extrabold tracking-[-0.02em] text-(--color-text) no-underline">
@@ -106,7 +106,7 @@ export default function OAuthConsentPage() {
                   <span>{scopeLabels[s] || s}</span>
                 </li>
               ))}
-              {/* Always show at least these if scope empty */}
+              {/* Default permissions shown when no scope is requested. */}
               {scopes.length === 0 && (
                 <>
                   <li style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.88rem" }}><Mail size={14} /> View your email address</li>
@@ -142,7 +142,7 @@ export default function OAuthConsentPage() {
           )}
         </div>
 
-        {/* help text for Google verification */}
+        {/* Guidance for Google Cloud OAuth domain verification. */}
         <p style={{ fontSize: "0.72rem", color: "var(--color-text-faint)", marginTop: "0.75rem", textAlign: "center", maxWidth: 520 }}>
           This is the OAuth consent screen for <strong>vocab-app-frontend-rosy.vercel.app/oauth/consent</strong>. If you’re configuring Google Cloud OAuth, set this as your Authorized domain’s authorization path.
         </p>

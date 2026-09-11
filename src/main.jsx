@@ -7,14 +7,15 @@ import './tokens.css'
 import './index.css'
 import App from './App.jsx'
 
-// Production defaults: 60s staleTime = instant cache on tab switch with quiet background revalidation.
-// Individual queries can override (e.g. quizNext uses staleTime:0 for always-fresh random question).
+// Shared query defaults: a 60s staleTime serves cached data instantly on tab
+// switches with quiet background revalidation. Individual queries may override
+// this (e.g. the quiz question query uses staleTime:0 for an always-fresh prompt).
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 60_000,
       gcTime: 5 * 60_000,
-      refetchOnWindowFocus: false, // typical for content apps — avoids surprise reloads when switching windows
+      refetchOnWindowFocus: false, // Disabled to prevent unexpected reloads when switching windows.
       retry: 1,
     },
   },

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, useReducedMotion } from 'framer-motion';
 import { api, playAudioWithBuffer } from '../api';
+import { friendlyError } from '../lib/errors';
 import { Plus, Volume2, Loader2, Languages, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -39,9 +40,9 @@ export default function AddWordForm() {
 
   const loading = addMutation.isPending;
   const status = addMutation.isError
-    ? { type: 'error', msg: addMutation.error?.message || 'Failed to add word.' }
+    ? { type: 'error', msg: friendlyError(addMutation.error, "Couldn't add that entry. Please try again.") }
     : lastAdded
-      ? { type: 'success', msg: 'Added successfully!' }
+      ? { type: 'success', msg: 'Added to your vocabulary.' }
       : null;
 
   const pendingAudio = lastAdded && !lastAdded.audio_url;
