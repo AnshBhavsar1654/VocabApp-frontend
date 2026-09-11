@@ -106,7 +106,7 @@ export default function Groups() {
         </div>
         {error && <div className="status-msg error" style={{ fontSize: '0.82rem', marginBottom: '0.6rem' }}>{error}</div>}
         <div className="groups-strip" role="tablist" aria-label="Groups">
-          {groups.map(g => {
+          {[...groups].sort((a,b)=> Number(a.is_default) - Number(b.is_default) || a.name.localeCompare(b.name)).map(g => {
             const active = selectedGroupId === g.id;
             return (
               <motion.button
@@ -120,7 +120,7 @@ export default function Groups() {
                 initial={false}
                 animate={{ scale: active ? 1.02 : 1 }}
                 transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-                title={g.is_default ? 'Default group' : 'Click to select — click again to edit'}
+                title={g.is_default ? 'System group — words not in other groups' : 'Click to select — click again to edit'}
               >
                 <span className="group-pill-icon">{g.is_default ? <FolderOpen size={14} /> : <Layers size={14} />}</span>
                 <span className="group-pill-name">{g.name}</span>
