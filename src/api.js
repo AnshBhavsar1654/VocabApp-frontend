@@ -1,10 +1,18 @@
 import { supabase } from "./lib/supabase";
 
 // MODE-driven API URL: single toggle VITE_MODE=dev -> localhost, else -> prod (render)
+// Hardened: if a dev build leaks to a non-localhost host (e.g. Vercel built with
+// committed VITE_MODE=dev), fall back to the prod URL instead of localhost.
 const MODE = (import.meta.env.VITE_MODE || import.meta.env.MODE || "dev").toLowerCase();
-const API_URL = MODE === "dev"
-  ? (import.meta.env.VITE_API_URL || "http://localhost:8000")
-  : (import.meta.env.VITE_API_URL_PROD || import.meta.env.VITE_API_URL || "https://vocabapp-backend.onrender.com");
+const PROD_URL = import.meta.env.VITE_API_URL_PROD || "https://vocabapp-backend.onrender.com";
+const DEV_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+let API_URL = MODE === "dev" ? DEV_URL : (import.meta.env.VITE_API_URL_PROD || import.meta.env.VITE_API_URL || PROD_URL);
+try {
+  const host = window.location.hostname;
+  const isLocalHost = host === "localhost" || host === "127.0.0.1";
+  const pointsToLocalhost = /localhost|127\.0\.0\.1/.test(API_URL);
+  if (!isLocalHost && pointsToLocalhost) API_URL = PROD_URL;
+} catch { /* SSR-safe: keep MODE resolution */ }
 
 async function authHeaders() {
   try {
