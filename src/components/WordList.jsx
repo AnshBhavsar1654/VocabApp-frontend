@@ -54,12 +54,14 @@ export default function WordList() {
     },
   });
 
-  // derived counts (from words, not server word_count)
+  // derived counts (from words, not server word_count) — Ungrouped = not in any group (groups.length===0)
   const pendingCount = useMemo(() => words.filter(w => !w.audio_url).length, [words]);
   const chipCounts = useMemo(() => {
     const m = new Map();
     groups.forEach(g => {
-      const c = words.filter(w => w.groups?.some(x => x.id === g.id)).length;
+      const c = g.is_default
+        ? words.filter(w => (w.groups?.length ?? 0) === 0).length
+        : words.filter(w => w.groups?.some(x => x.id === g.id)).length;
       m.set(g.id, c);
     });
     return m;
@@ -67,13 +69,17 @@ export default function WordList() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const ungroupedId = groups.find(g => g.is_default)?.id;
     return words.filter(w => {
       const matchesSearch = !q || w.english_word.toLowerCase().includes(q) || w.german_word.toLowerCase().includes(q);
-      const matchesGroup = activeGroupFilter === 'all' || w.groups?.some(g => g.id === activeGroupFilter);
+      let matchesGroup;
+      if (activeGroupFilter === 'all') matchesGroup = true;
+      else if (activeGroupFilter === ungroupedId) matchesGroup = (w.groups?.length ?? 0) === 0;
+      else matchesGroup = w.groups?.some(g => g.id === activeGroupFilter);
       const matchesPending = !showPendingOnly || !w.audio_url;
       return matchesSearch && matchesGroup && matchesPending;
     });
-  }, [words, search, activeGroupFilter, showPendingOnly]);
+  }, [words, search, activeGroupFilter, showPendingOnly, groups]);
 
   const hasActiveFilter = activeGroupFilter !== 'all' || showPendingOnly || search.trim() !== '';
   const clearFilters = () => { setActiveGroupFilter('all'); setShowPendingOnly(false); setSearch(''); };
