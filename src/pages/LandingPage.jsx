@@ -360,7 +360,7 @@ export default function LandingPage() {
               <div>
                 <h2>Your first ten words take five minutes.</h2>
                 <p>Sign up, add a word you heard today, and hear it spoken back. Flashcard practice handles the rest.</p>
-                <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+                <div className="landing-finale-actions" style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
                   {isAuthenticated ? (
                     <Link to="/app" className="landing-btn landing-btn-primary landing-btn-lg">
                       Open my words <ArrowRight size={17} />
