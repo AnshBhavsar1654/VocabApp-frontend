@@ -50,17 +50,17 @@ export default function SignupPage() {
   return (
     <AuthLayout
       title={<><UserPlus size={20} /> Create account</>}
-      beforeAccent="Your first ten"
-      accentWord="German words"
-      afterAccent="take five minutes."
-      description="Add a word you heard today, hear it spoken back, and let the quiz handle the rest."
+      beforeAccent="Start your"
+      accentWord="German flashcard"
+      afterAccent="deck."
+      description="Add a word you heard today, hear it spoken back, and let flashcard practice handle the rest."
       points={[
         { icon: Sparkles, title: "Free to start", sub: "Add words in seconds, no setup needed" },
         { icon: Volume2, title: "Audio on everything", sub: "Pronunciation generated for every entry" },
-        { icon: BookOpen, title: "Quiz unlocks at 10 words", sub: "Flip-card sessions with streaks and goals" },
+        { icon: BookOpen, title: "Practice unlocks at 10 cards", sub: "Flip-card practice with streaks and goals" },
       ]}
     >
-      <p className="auth-sub">Your words, groups, and progress — private per account.</p>
+      <p className="auth-sub">Your own deck, made by you — private per account.</p>
       {error && <div className="status-msg error" role="alert">{error}</div>}
       {success && <div className="status-msg success" role="status">{success}</div>}
       <form onSubmit={handleSubmit}>

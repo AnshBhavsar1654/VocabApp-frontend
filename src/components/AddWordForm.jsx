@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, useReducedMotion } from 'framer-motion';
 import { api, playAudioWithBuffer } from '../api';
 import { friendlyError } from '../lib/errors';
-import { Plus, Volume2, Loader2, Languages, Sparkles } from 'lucide-react';
+import { Plus, Volume2, Loader2, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function AddWordForm() {
@@ -49,9 +49,9 @@ export default function AddWordForm() {
 
   return (
     <motion.div className="card" initial={shouldReduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
-      <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Sparkles size={18} style={{ color: 'var(--color-accent)' }} /> Add a word or phrase</h2>
+      <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Sparkles size={18} style={{ color: 'var(--color-accent)' }} /> Add a flashcard</h2>
       <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginTop: '0.3rem', marginBottom: '1.25rem' }}>
-        Type in English or German — ä ö ü ß supported. We'll translate and create audio.
+        Type in English or German — ä ö ü ß supported. We&apos;ll translate it, speak it, and file it in your deck.
       </p>
 
       {status && <div className={`status-msg ${status.type}`}>{status.msg}</div>}
@@ -70,21 +70,11 @@ export default function AddWordForm() {
               disabled={loading}
             />
           </div>
-          <div style={{ flex: '0 0 130px' }}>
-            <label className="input-label" htmlFor="lang-select">Language</label>
-            <div style={{ position: 'relative' }}>
-              <select
-                id="lang-select"
-                className="text-input"
-                value={sourceLang}
-                onChange={(e) => setSourceLang(e.target.value)}
-                disabled={loading}
-                style={{ paddingLeft: '2.2rem' }}
-              >
-                <option value="en">English</option>
-                <option value="de">German</option>
-              </select>
-              <Languages size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-faint)', pointerEvents: 'none' }} />
+          <div style={{ flex: '0 0 150px' }}>
+            <span className="input-label" id="lang-label">Language</span>
+            <div className="seg-control" role="group" aria-labelledby="lang-label">
+              <button type="button" className={`seg-btn ${sourceLang==='en' ? 'active' : ''}`} onClick={() => setSourceLang('en')} disabled={loading} aria-pressed={sourceLang==='en'}>English</button>
+              <button type="button" className={`seg-btn ${sourceLang==='de' ? 'active' : ''}`} onClick={() => setSourceLang('de')} disabled={loading} aria-pressed={sourceLang==='de'}>German</button>
             </div>
           </div>
         </div>

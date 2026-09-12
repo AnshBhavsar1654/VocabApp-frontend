@@ -431,6 +431,13 @@ html[data-theme="dark"] .landing-ticket .de { color: var(--color-primary); }
   padding: 0.2rem 0.55rem;
   border-radius: var(--radius-pill);
 }
+button.landing-audio-pill {
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform var(--dur-fast) var(--ease-spring), background var(--dur-fast) var(--ease-out);
+}
+button.landing-audio-pill:hover:not(:disabled) { transform: translateY(-1px); }
+button.landing-audio-pill:disabled { opacity: 0.7; cursor: default; }
 
 /* quiz band: full-width tinted */
 .landing-band {

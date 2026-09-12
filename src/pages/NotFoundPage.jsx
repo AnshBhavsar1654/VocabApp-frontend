@@ -7,7 +7,7 @@ export default function NotFoundPage() {
       <div className="card text-center max-w-md w-full">
         <h2>Page not found</h2>
         <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem", margin: "0.5rem 0 1rem" }}>
-          The page you are looking for does not exist.
+          That flashcard pile doesn&apos;t exist.
         </p>
         <Link to={PATHS.HOME} className="btn-primary" style={{ maxWidth: 220, margin: "0 auto", textDecoration: "none" }}>
           Go home

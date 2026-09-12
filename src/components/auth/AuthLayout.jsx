@@ -22,7 +22,7 @@ export default function AuthLayout({
             <Link to="/" className="auth-wordmark">
               Wort<span>Schatz</span>
             </Link>
-            <p className="auth-brand-tag">ä ö ü ß ready — one word at a time.</p>
+            <p className="auth-brand-tag">Your German flashcards — one word at a time.</p>
           </div>
           <ThemeToggle />
         </div>

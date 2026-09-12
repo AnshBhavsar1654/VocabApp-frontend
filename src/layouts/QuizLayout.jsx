@@ -9,14 +9,17 @@ export default function QuizLayout() {
       <div className="min-h-dvh bg-(--color-bg) flex items-start justify-center px-4 py-6">
         <div className="w-full max-w-140">
           <div className="flex items-center justify-between mb-4">
-            <span className="font-(--font-display) text-[1.15rem] font-extrabold tracking-[-0.02em] text-(--color-text) leading-none">
-              Wort<span className="text-(--color-primary)">Schatz</span>
+            <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span className="font-(--font-display) text-[1.15rem] font-extrabold tracking-[-0.02em] text-(--color-text) leading-none">
+                Wort<span className="text-(--color-primary)">Schatz</span>
+              </span>
+              <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", fontWeight: 600 }}>Flashcard practice</span>
             </span>
             <button
               className="inline-flex items-center justify-center w-9.5 h-9.5 rounded-sm bg-(--color-surface-raised) border border-(--color-border) text-(--color-text-muted) cursor-pointer hover:bg-(--color-surface-hover) hover:text-(--color-text)"
               onClick={() => navigate(PATHS.APP)}
-              title="Exit quiz"
-              aria-label="Exit quiz"
+              title="Exit practice"
+              aria-label="Exit practice"
             >
               <X size={18} />
             </button>

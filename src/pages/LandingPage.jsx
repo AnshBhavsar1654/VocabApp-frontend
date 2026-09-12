@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -34,56 +34,98 @@ function Reveal({ children, delay = 0, ...rest }) {
   );
 }
 
-// Small interactive add-word mock: type anything, see an EN↔DE ticket appear.
+// Fixed-word demo: the word is locked, clicking Add entry saves it with its
+// English translation and real listenable audio (browser speech synthesis).
+const DEMO_CARD = { de: "die Gemütlichkeit", say: "Gemütlichkeit", en: "coziness" };
+
 function AddMock() {
-  const [text, setText] = useState("Gemütlichkeit");
-  const [lang, setLang] = useState("de");
-  const [ticket, setTicket] = useState({ en: "coziness", de: "die Gemütlichkeit" });
-  const show = (e) => {
-    e.preventDefault();
-    const t = text.trim() || "Bahnhof";
-    if (lang === "de") setTicket({ en: "your translation appears here", de: t });
-    else setTicket({ en: t, de: "deine Übersetzung erscheint hier" });
+  const [added, setAdded] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [noAudio, setNoAudio] = useState(false);
+
+  React.useEffect(() => {
+    return () => { try { window.speechSynthesis?.cancel(); } catch {} };
+  }, []);
+
+  const speak = () => {
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth) { setNoAudio(true); return; }
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(DEMO_CARD.say);
+      u.lang = "de-DE";
+      u.rate = 0.85;
+      const voices = synth.getVoices();
+      const de = voices.find((v) => v.lang?.toLowerCase().startsWith("de"));
+      if (de) u.voice = de;
+      u.onend = () => setSpeaking(false);
+      u.onerror = () => setSpeaking(false);
+      setSpeaking(true);
+      setNoAudio(false);
+      synth.speak(u);
+    } catch {
+      setNoAudio(true);
+      setSpeaking(false);
+    }
   };
+
   return (
     <div className="landing-add-mock">
-      <form onSubmit={show}>
+      <div>
         <div className="landing-add-formrow">
           <div className="grow">
-            <label className="landing-mini-label" htmlFor="landing-word">Word or phrase</label>
+            <label className="landing-mini-label" htmlFor="landing-word">Demo word — locked, just press add</label>
             <input
               id="landing-word"
               className="landing-demo-input"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="e.g. Bahnhof"
+              value={DEMO_CARD.say}
+              disabled
+              readOnly
+              aria-readonly="true"
+              style={{ opacity: 1 }}
             />
           </div>
           <div className="lang">
-            <label className="landing-mini-label" htmlFor="landing-lang">Language</label>
-            <select
-              id="landing-lang"
-              className="landing-demo-input"
-              value={lang}
-              onChange={(e) => setLang(e.target.value)}
-            >
-              <option value="en">English</option>
-              <option value="de">German</option>
-            </select>
+            <span className="landing-mini-label">Language</span>
+            <div className="seg-control" aria-label="Demo word language">
+              <span className="seg-btn active" aria-current="true">German</span>
+            </div>
           </div>
         </div>
-        <button type="submit" className="landing-demo-check" style={{ marginTop: "0.7rem" }}>
-          <Plus size={16} /> Add entry
+        <button
+          type="button"
+          className="landing-demo-check"
+          style={{ marginTop: "0.7rem" }}
+          onClick={() => setAdded(true)}
+          disabled={added}
+        >
+          {added ? <Check size={16} /> : <Plus size={16} />}
+          {added ? "Saved to deck" : "Add entry"}
         </button>
-      </form>
-      <div className="landing-ticket" aria-live="polite">
-        <span>{ticket.en}</span>
-        <span className="sep">↔</span>
-        <span className="de">{ticket.de}</span>
-        <span className="landing-audio-pill">
-          <Volume2 size={12} /> audio generated
-        </span>
       </div>
+      {added && (
+        <motion.div
+          className="landing-ticket"
+          aria-live="polite"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, ease: EASE }}
+        >
+          <span>{DEMO_CARD.en}</span>
+          <span className="sep">↔</span>
+          <span className="de">{DEMO_CARD.de}</span>
+          <button
+            type="button"
+            className="landing-audio-pill"
+            onClick={speak}
+            disabled={speaking}
+            title={noAudio ? "Audio not supported in this browser" : "Listen to the pronunciation"}
+            aria-label={`Listen to ${DEMO_CARD.de}`}
+          >
+            <Volume2 size={12} /> {speaking ? "playing…" : noAudio ? "no audio here" : "listen"}
+          </button>
+        </motion.div>
+      )}
     </div>
   );
 }
@@ -114,13 +156,13 @@ export default function LandingPage() {
             transition={{ duration: 0.5, ease: EASE }}
           >
             <span className="landing-eyebrow">
-              <Sparkles size={12} /> DE ↔ EN VOCABULARY TRAINER
+              <Sparkles size={12} /> YOUR GERMAN FLASHCARDS
             </span>
             <h1 className="landing-h1">
               Keep every <span className="accent">German word</span> you learn.
             </h1>
             <p className="landing-sub">
-              Add words in seconds, hear every one spoken, group them your way, and lock them in with quick flip-card quizzes.
+              Add words as you meet them, hear every one spoken, and lock them in with flashcard practice.
             </p>
             <div className="landing-hero-ctas">
               <Link to={appTo} className="landing-btn landing-btn-primary landing-btn-lg">
@@ -141,7 +183,8 @@ export default function LandingPage() {
         </div>
         <div className="landing-wrap">
           <div className="landing-ticks" aria-label="Highlights">
-            <span className="landing-tick"><Check size={13} /> Spoken audio for every word</span>
+            <span className="landing-tick"><Check size={13} /> Your own deck, made by you</span>
+            <span className="landing-tick"><Check size={13} /> Auto-generated audio on every card</span>
             <span className="landing-tick"><Check size={13} /> ä ö ü ß ready</span>
             <span className="landing-tick"><Check size={13} /> Custom groups</span>
             <span className="landing-tick"><Check size={13} /> Works on mobile</span>
@@ -156,7 +199,7 @@ export default function LandingPage() {
             <span className="landing-step-num">1</span>
             <div>
               <h3>Add in seconds</h3>
-              <p>Type in English or German. Translation and pronunciation audio are created for you.</p>
+              <p>Type in English or German — translation plus auto-generated audio, saved straight to the card.</p>
             </div>
           </div>
           <span className="landing-step-arrow"><ChevronRight size={18} /></span>
@@ -172,7 +215,7 @@ export default function LandingPage() {
             <span className="landing-step-num">3</span>
             <div>
               <h3>Recall under pressure</h3>
-              <p>Flip-card sessions with typing, streaks, and a progress ring toward your goal.</p>
+              <p>Flip-card practice with typing, streaks, and a progress ring toward your goal.</p>
             </div>
           </div>
         </div>
@@ -192,9 +235,13 @@ export default function LandingPage() {
             <div className="landing-add-grid">
               <AddMock />
               <div className="landing-add-side">
-                <BookOpen size={22} style={{ color: "var(--color-primary-strong)" }} />
-                <strong>Phrases count too</strong>
-                <p>Single words or whole phrases — anything with a space is kept as a phrase and quizzed as one.</p>
+                <Volume2 size={22} style={{ color: "var(--color-primary-strong)" }} />
+                <strong>Every card speaks itself</strong>
+                <p>The moment you save a word, its German pronunciation audio is auto-generated and pinned to the card — tap the speaker on any flashcard to hear it, in the deck or mid-quiz.</p>
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start", borderTop: "1px solid var(--color-border)", paddingTop: "0.75rem" }}>
+                  <BookOpen size={18} style={{ color: "var(--color-primary-strong)", flexShrink: 0, marginTop: "0.1rem" }} />
+                  <p style={{ margin: 0 }}>Phrases count too — anything with a space is kept as a phrase and quizzed as one.</p>
+                </div>
               </div>
             </div>
           </Reveal>
@@ -207,10 +254,10 @@ export default function LandingPage() {
           <Reveal>
             <div>
               <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 800, letterSpacing: "-0.015em", fontSize: "clamp(1.4rem, 2.6vw, 1.9rem)", lineHeight: 1.12, margin: "0 0 0.5rem" }}>
-                Quizzes that feel like a game, not an exam.
+                Flip through your deck like real flashcards.
               </h2>
               <p className="lede" style={{ marginBottom: 0 }}>
-                Flip the card to reveal, type your answer to score. Shortcuts keep your hands
+                Each card flips to reveal, typing scores your recall. Shortcuts keep your hands
                 on the keyboard and your streak alive.
               </p>
               <ul className="landing-checklist">
@@ -242,7 +289,7 @@ export default function LandingPage() {
               </div>
               <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.8rem" }}>
                 <Link to={appTo} className="landing-btn landing-btn-primary" style={{ flex: 1 }}>
-                  {isAuthenticated ? "Play for real" : "Start quizzing"} <ArrowRight size={16} />
+                  {isAuthenticated ? "Practice for real" : "Start practicing"} <ArrowRight size={16} />
                 </Link>
               </div>
             </div>
@@ -254,10 +301,11 @@ export default function LandingPage() {
       <section id="groups" className="landing-section" style={{ scrollMarginTop: "80px" }}>
         <div className="landing-wrap">
           <Reveal>
-            <h2>Group words the way you think.</h2>
+            <h2>Learning, personalized your way.</h2>
             <p className="lede">
-              Exam chapter, travel list, tricky verbs — make a group per idea.
-              Anything homeless sits in Ungrouped until you file it.
+              Your deck, your rules. Build groups around your life — exam chapter, travel list,
+              tricky verbs — set your own word goal, and practice at your own pace.
+              Anything homeless waits in Ungrouped until you file it.
             </p>
           </Reveal>
           <Reveal delay={0.08}>
@@ -287,7 +335,7 @@ export default function LandingPage() {
           <div className="landing-proof">
             <div>
               <div className="big">10+</div>
-              <div className="cap">Words unlock quizzes</div>
+              <div className="cap">Cards unlock practice</div>
               <div className="sub">Add ten entries and your first flip session is ready.</div>
             </div>
             <div>
@@ -311,7 +359,7 @@ export default function LandingPage() {
             <div className="landing-finale">
               <div>
                 <h2>Your first ten words take five minutes.</h2>
-                <p>Sign up, add a word you heard today, and hear it spoken back. The quiz handles the rest.</p>
+                <p>Sign up, add a word you heard today, and hear it spoken back. Flashcard practice handles the rest.</p>
                 <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
                   {isAuthenticated ? (
                     <Link to="/app" className="landing-btn landing-btn-primary landing-btn-lg">
@@ -342,7 +390,7 @@ export default function LandingPage() {
             </div>
           </Reveal>
           <footer className="landing-footer">
-            <span>WortSchatz — one word at a time.</span>
+            <span>WortSchatz — your German flashcards.</span>
             <nav aria-label="Footer">
               <Link to="/login">Sign in</Link>
               <Link to="/signup">Sign up</Link>

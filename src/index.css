@@ -518,6 +518,7 @@ html[data-theme="dark"] .word-lang.german { color: var(--color-primary); }
 }
 .word-tile:hover { border-color: var(--color-border-strong); box-shadow: var(--shadow-raised); }
 .word-tile.editing { min-height: auto; background: var(--color-surface); overflow: hidden; }
+.word-tile.tile-pending { border-style: dashed; border-color: var(--color-accent); }
 .word-tile:has(.group-dropdown) { z-index: 30; }
 .word-grid { overflow: visible; }
 
@@ -715,6 +716,68 @@ html[data-theme="dark"] .status-msg.success { color: var(--color-primary); }
 }
 .search-input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-soft); }
 .search-input::placeholder { color: var(--color-text-faint); }
+.search-clear {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-text-faint);
+  cursor: pointer;
+}
+.search-clear:hover { background: var(--color-surface-raised); color: var(--color-text); }
+
+/* Visible keyboard focus for icon-only and pill controls */
+.btn-icon:focus-visible,
+.filter-chip:focus-visible,
+.group-pill:focus-visible,
+.speaker-btn:focus-visible,
+.more-btn:focus-visible,
+.search-clear:focus-visible,
+.seg-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Segmented EN/DE control (AddWordForm) */
+.seg-control {
+  display: flex;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 3px;
+  gap: 2px;
+}
+.seg-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.82rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.seg-btn:hover:not(.active) { color: var(--color-text); }
+.seg-btn.active { background: var(--color-surface); color: var(--color-text); box-shadow: var(--shadow-card); }
+.seg-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Armed destructive confirm (Groups edit dialog) */
+.btn-danger-armed {
+  background: var(--color-danger-soft) !important;
+  border-color: var(--color-danger) !important;
+  color: var(--color-danger) !important;
+}
 
 /* Skeleton — warm ticket shape, not generic gray bars */
 .skeleton {
@@ -871,6 +934,7 @@ html[data-theme="dark"] .group-pill.is-default.active .group-pill-count { color:
 .group-dropdown { position: absolute; top: calc(100% + 6px); right: 0; left: auto; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 0.4rem; z-index: 30; min-width: 180px; box-shadow: var(--shadow-raised); }
 .group-dropdown-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.84rem; color: var(--color-text-muted); }
 .group-dropdown-item:hover { background: var(--color-surface-raised); color: var(--color-text); }
+.group-dropdown-item input[type="checkbox"] { accent-color: var(--color-primary); width: 15px; height: 15px; flex-shrink: 0; cursor: pointer; }
 
 .modal-overlay { position: fixed; inset: 0; background: rgba(27, 24, 21, 0.55); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
 .modal-content { width: 100%; max-width: 520px; max-height: 80vh; display: flex; flex-direction: column; }

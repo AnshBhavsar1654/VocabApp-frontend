@@ -59,11 +59,11 @@ export default function LandingQuizDemo() {
   };
 
   return (
-    <div className="landing-demo" aria-label="Interactive quiz demo">
+    <div className="landing-demo" aria-label="Interactive flashcard demo">
       <div className="landing-demo-head">
         <span className="landing-demo-title">
           <MousePointerClick size={16} style={{ color: "var(--color-accent-strong)" }} />
-          Try a card
+          Try a flashcard
         </span>
         <span className="landing-demo-live">
           <span className="dot" /> LIVE DEMO

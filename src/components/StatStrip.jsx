@@ -96,7 +96,7 @@ export default function StatStrip() {
             <span className="font-(--font-display) font-bold text-[0.78rem] text-(--color-text) uppercase tracking-[0.04em]">
               Tag Streak
             </span>
-            <span className="text-[0.78rem] text-(--color-text-muted) font-medium">Quiz streak</span>
+            <span className="text-[0.78rem] text-(--color-text-muted) font-medium">Practice streak</span>
           </div>
         </article>
 

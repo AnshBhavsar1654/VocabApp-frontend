@@ -82,6 +82,13 @@ export default function Groups() {
   }, [showEdit]);
 
   React.useEffect(() => {
+    if (!showAddWords) return;
+    const onKey = (e) => { if (e.key === 'Escape') setShowAddWords(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showAddWords]);
+
+  React.useEffect(() => {
     if (openActionsId === null) return;
     const close = (e) => { if (e.target.closest('.word-tile')) return; setOpenActionsId(null); };
     document.addEventListener('click', close);
@@ -157,7 +164,7 @@ export default function Groups() {
             );
           })}
         </div>
-        <p className="groups-strip-hint">Tap a group to filter · Tap again on a custom group to edit</p>
+        <p className="groups-strip-hint">Tap a group to open its cards · Tap again on a custom group to edit</p>
       </div>
 
       <div className="groups-panel card">
@@ -177,8 +184,8 @@ export default function Groups() {
               <div className="empty-state">
                 <div className="empty-backpack"><Users size={28} /></div>
                 <h3>Noch keine Wörter</h3>
-                <p>This group is still empty — add a few to organize your trip.</p>
-                <p className="hint">Words live in Ungrouped until you sort them.</p>
+                <p>No flashcards here yet — add a few to build this pile.</p>
+                <p className="hint">Cards live in Ungrouped until you sort them.</p>
               </div>
             ) : (
               <div className="word-grid">
@@ -215,7 +222,7 @@ export default function Groups() {
       <AnimatePresence>
         {showCreate && (
           <motion.div className="modal-overlay" onClick={() => setShowCreate(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <motion.div className="modal-content card modal-narrow" onClick={e => e.stopPropagation()} initial={shouldReduce ? false : { scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={shouldReduce ? {} : { scale: 0.96, opacity: 0 }} transition={{ duration: 0.2 }}>
+            <motion.div className="modal-content card modal-narrow" role="dialog" aria-modal="true" aria-label="Create new group" onClick={e => e.stopPropagation()} initial={shouldReduce ? false : { scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={shouldReduce ? {} : { scale: 0.96, opacity: 0 }} transition={{ duration: 0.2 }}>
               <div className="modal-header"><h2>New group</h2><button className="btn-icon" onClick={() => setShowCreate(false)}><X size={18} /></button></div>
               <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.75rem' }}>Create a new collection — z.B. “Uni Köln”, “Reise”.</p>
               <div className="input-group">
@@ -235,7 +242,7 @@ export default function Groups() {
       <AnimatePresence>
         {showEdit && editTarget && (
           <motion.div className="modal-overlay" onClick={() => setShowEdit(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <motion.div className="modal-content card modal-narrow" onClick={e => e.stopPropagation()} initial={shouldReduce ? false : { scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={shouldReduce ? {} : { scale: 0.96, opacity: 0 }} transition={{ duration: 0.2 }}>
+            <motion.div className="modal-content card modal-narrow" role="dialog" aria-modal="true" aria-label={`Edit group ${editTarget.name}`} onClick={e => e.stopPropagation()} initial={shouldReduce ? false : { scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={shouldReduce ? {} : { scale: 0.96, opacity: 0 }} transition={{ duration: 0.2 }}>
               <div className="modal-header"><h2>Edit group</h2><button className="btn-icon" onClick={() => setShowEdit(false)}><X size={18} /></button></div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}><Layers size={14} /> {editTarget.name} · {editTarget.word_count} words</div>
               <div className="input-group">
@@ -243,7 +250,7 @@ export default function Groups() {
                 <input id="edit-group-input" type="text" className="text-input" value={editingName} onChange={e => setEditingName(e.target.value)} onKeyDown={e => { if (e.key==='Enter') handleRename(); if (e.key==='Escape') setShowEdit(false); }} autoFocus disabled={renameGroupMutation.isPending} />
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'space-between', flexWrap:'wrap' }}>
-                <button className="btn-icon danger" style={{ width:'auto', padding:'0 0.9rem', borderRadius:'var(--radius-md)', borderColor:'var(--color-danger)' }} onClick={handleDelete} disabled={deleteGroupMutation.isPending} title={confirmingDelete ? 'Click again to permanently delete this group' : 'Delete this group'}><Trash2 size={14} /> {confirmingDelete ? 'Confirm delete' : 'Delete group'}</button>
+                <button className={`btn-icon danger ${confirmingDelete ? 'btn-danger-armed' : ''}`} style={{ width:'auto', padding:'0 0.9rem', borderRadius:'var(--radius-md)', borderColor:'var(--color-danger)' }} onClick={handleDelete} disabled={deleteGroupMutation.isPending} title={confirmingDelete ? 'Click again to permanently delete this group' : 'Delete this group'}>{deleteGroupMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} {confirmingDelete ? 'Confirm delete' : 'Delete group'}</button>
                 <div style={{ display:'flex', gap:'0.5rem' }}>
                   <button className="btn-icon" style={{ width:'auto', padding:'0 0.9rem', borderRadius:'var(--radius-md)' }} onClick={() => setShowEdit(false)}>Cancel</button>
                   <button className="btn-primary-style" onClick={handleRename} disabled={renameGroupMutation.isPending || !editingName.trim()}>{renameGroupMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save</button>
@@ -254,11 +261,12 @@ export default function Groups() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
       {showAddWords && (
-        <div className="modal-overlay" onClick={() => setShowAddWords(false)}>
-          <motion.div className="modal-content card" onClick={e => e.stopPropagation()} initial={shouldReduce ? false : { scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.2 }}>
-            <div className="modal-header"><h2>Add to {selectedGroup?.name}</h2><button className="btn-icon" onClick={() => setShowAddWords(false)}><X size={18} /></button></div>
-            <div className="search-wrapper" style={{ marginBottom: '0.75rem' }}><Search size={14} className="search-icon" /><input type="text" className="search-input" placeholder="Search…" value={addWordsSearch} onChange={e => setAddWordsSearch(e.target.value)} autoFocus /></div>
+        <motion.div className="modal-overlay" onClick={() => setShowAddWords(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div className="modal-content card" role="dialog" aria-modal="true" aria-label={`Add words to ${selectedGroup?.name || 'group'}`} onClick={e => e.stopPropagation()} initial={shouldReduce ? false : { scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={shouldReduce ? {} : { scale: 0.96, opacity: 0 }} transition={{ duration: 0.2 }}>
+            <div className="modal-header"><h2>Add to {selectedGroup?.name}</h2><button className="btn-icon" onClick={() => setShowAddWords(false)} aria-label="Close"><X size={18} /></button></div>
+            <div className="search-wrapper" style={{ marginBottom: '0.75rem' }}><Search size={14} className="search-icon" /><input type="text" className="search-input" placeholder="Search…" aria-label="Search words to add" value={addWordsSearch} onChange={e => setAddWordsSearch(e.target.value)} autoFocus /></div>
             <div className="add-words-list">
               {wordsNotInGroup.length === 0 ? (
                 <div className="empty-state" style={{ padding: '1.2rem' }}><p>All words already in this group.</p><p className="hint">Nice — group is complete!</p></div>
@@ -271,8 +279,9 @@ export default function Groups() {
             </div>
             {wordsNotInGroup.length > 1 && <button className="btn-primary-style" onClick={() => handleAdd(wordsNotInGroup.map(w => w.id))} disabled={addWordsMutation.isPending} style={{ marginTop: '0.75rem' }}>{addWordsMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Add All ({wordsNotInGroup.length})</button>}
           </motion.div>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   );
 }

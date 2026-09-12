@@ -149,15 +149,15 @@ export default function Quiz({ onExit, onNeedWords }) {
     return (
       <div className="card" style={{ textAlign: 'center' }}>
         <div className="empty-backpack" style={{ marginBottom: '0.75rem' }}><BookOpen size={28} /></div>
-        <h3 style={{ fontFamily: 'var(--font-display)' }}>Need more words</h3>
+        <h3 style={{ fontFamily: 'var(--font-display)' }}>Build your deck first</h3>
         <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', margin: '0.5rem 0 1rem' }}>
-          Quiz needs at least <strong>10 words</strong> for a proper session. You have <strong>{wordsCount}</strong>.
+          Flashcard practice needs at least <strong>10 cards</strong> for a proper round. You have <strong>{wordsCount}</strong>.
         </p>
-        <p className="hint" style={{ fontSize: '0.82rem', marginBottom: '1rem' }}>Add {10 - wordsCount} more to unlock the immersive flip session.</p>
+        <p className="hint" style={{ fontSize: '0.82rem', marginBottom: '1rem' }}>Add {10 - wordsCount} more to unlock flip practice.</p>
         {onNeedWords ? (
           <button onClick={onNeedWords} className="btn-primary" style={{ maxWidth: 240, margin: '0 auto' }}><Sparkles size={16} /> Add words</button>
         ) : (
-          <p className="hint">Go to Add Word to add more.</p>
+          <p className="hint">Add a few flashcards first.</p>
         )}
       </div>
     );
@@ -168,8 +168,8 @@ export default function Quiz({ onExit, onNeedWords }) {
     return (
       <div className="card" style={{ textAlign: 'center' }}>
         <div className="empty-backpack" style={{ marginBottom: '0.75rem' }}><Sparkles size={28} /></div>
-        <h3 style={{ fontFamily: 'var(--font-display)' }}>Start a session</h3>
-        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', margin: '0.5rem 0 1rem' }}>Choose how many cards — max 20. You have {wordsCount} words.</p>
+        <h3 style={{ fontFamily: 'var(--font-display)' }}>Start practicing</h3>
+        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', margin: '0.5rem 0 1rem' }}>Choose how many flashcards — max 20. You have {wordsCount} cards.</p>
         <div style={{ display:'flex', gap:'0.4rem', justifyContent:'center', flexWrap:'wrap', marginBottom:'1rem' }}>
           {[5,10,15,20].map(n => (
             <button key={n} onClick={()=>setSessionSize(n)} className={`filter-chip ${sessionSize===n?'active':''}`} style={{ cursor:'pointer' }}>{n}</button>
@@ -194,12 +194,12 @@ export default function Quiz({ onExit, onNeedWords }) {
     return (
       <div className="card" style={{ textAlign: 'center', position:'relative', overflow:'hidden' }}>
         <div className="empty-backpack" style={{ marginBottom:'0.75rem', background:'var(--color-primary-soft)', borderColor:'var(--color-primary)' }}><Trophy size={28} color="var(--color-primary)" /></div>
-        <h3 style={{ fontFamily:'var(--font-display)', fontSize:'1.4rem' }}>Session complete!</h3>
+        <h3 style={{ fontFamily:'var(--font-display)', fontSize:'1.4rem' }}>Practice complete!</h3>
         <p style={{ fontFamily:'var(--font-display)', fontWeight:800, fontSize:'2rem', margin:'0.5rem 0', color:'var(--color-primary-strong)' }}>{correctCount} / {session.size}</p>
         <p style={{ color:'var(--color-text-muted)', fontSize:'0.9rem', marginBottom:'1rem' }}>correct · {session.size - correctCount} to review</p>
         <div style={{ display:'flex', gap:'0.6rem', justifyContent:'center', flexWrap:'wrap' }}>
-          <button onClick={()=>{ setSession(null); setResults([]); }} className="btn-primary" style={{ width:'auto', padding:'0.6rem 1.25rem' }}><RotateCcw size={16}/> New session</button>
-          {onExit && <button onClick={onExit} className="btn-primary-style" style={{ background:'var(--color-surface)', color:'var(--color-text)', borderColor:'var(--color-border)' }}>Exit quiz</button>}
+            <button onClick={()=>{ setSession(null); setResults([]); }} className="btn-primary" style={{ width:'auto', padding:'0.6rem 1.25rem' }}><RotateCcw size={16}/> New round</button>
+          {onExit && <button onClick={onExit} className="btn-primary-style" style={{ background:'var(--color-surface)', color:'var(--color-text)', borderColor:'var(--color-border)' }}>Exit practice</button>}
         </div>
         <div style={{ marginTop:'1rem', display:'flex', gap:'0.4rem', justifyContent:'center', flexWrap:'wrap' }}>
           {results.map((r,i)=>(
@@ -290,7 +290,7 @@ export default function Quiz({ onExit, onNeedWords }) {
           <p style={{ fontSize:'0.72rem', color:'var(--color-text-faint)', textAlign:'center', marginTop:'0.5rem' }}>Flip just shows the answer — your score comes from <strong>Check</strong>.</p>
         </form>
       ) : (
-        <motion.div className={`quiz-result ${result.correct ? 'correct' : 'incorrect'}`} initial={shouldReduce?false:{scale:0.96, opacity:0}} animate={{scale:1, opacity:1}} transition={{duration:0.22, ease:[0.34,1.56,0.64,1]}}>
+        <motion.div role="status" className={`quiz-result ${result.correct ? 'correct' : 'incorrect'}`} initial={shouldReduce?false:{scale:0.96, opacity:0}} animate={{scale:1, opacity:1}} transition={{duration:0.22, ease:[0.34,1.56,0.64,1]}}>
           <div style={{ display:'flex', justifyContent:'center', marginBottom:'0.5rem' }}>
             {result.correct ? <CheckCircle size={40} color="var(--color-primary)"/> : <XCircle size={40} color="var(--color-danger)"/>}
           </div>

@@ -46,17 +46,17 @@ export default function LoginPage() {
   return (
     <AuthLayout
       title={<><LogIn size={20} /> Welcome back</>}
-      beforeAccent="Pick up"
-      accentWord="right where"
-      afterAccent="you left off."
+      beforeAccent="Your flashcards,"
+      accentWord="ready to"
+      afterAccent="practice."
       description="Your words, groups, and streaks are waiting — private to your account, ready on any device."
       points={[
         { icon: Volume2, title: "Every word speaks", sub: "Spoken audio on each entry you saved" },
         { icon: Layers, title: "Groups stay organised", sub: "Reisen, Verben, exam chapters — as you left them" },
-        { icon: Flame, title: "Streak keeps counting", sub: "One quick quiz extends today's Tag Streak" },
+        { icon: Flame, title: "Streak keeps counting", sub: "One quick practice round extends today's Tag Streak" },
       ]}
     >
-      <p className="auth-sub">Sign in to your WortSchatz to keep learning.</p>
+      <p className="auth-sub">Sign in to flip through your deck and keep your streak alive.</p>
       {error && <div className="status-msg error" role="alert">{error}</div>}
       <form onSubmit={handleSubmit} noValidate={false}>
         <div className="auth-field">

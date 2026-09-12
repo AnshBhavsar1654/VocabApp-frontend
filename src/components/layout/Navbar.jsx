@@ -33,7 +33,7 @@ export default function Navbar() {
             Wort<span className="text-(--color-primary)">Schatz</span>
           </h1>
           <p className="text-[0.72rem] text-(--color-text-muted) mt-[0.15rem] whitespace-nowrap max-[768px]:hidden">
-            ä ö ü ß ready — one word at a time.
+            Your German flashcards — one word at a time.
           </p>
         </div>
 

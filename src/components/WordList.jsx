@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { api, playAudioWithBuffer } from '../api';
 import { friendlyError } from '../lib/errors';
 import { Volume2, Trash2, Loader2, RefreshCw, Pencil, Check, X, Search, Layers, Backpack, Music2, MoreHorizontal, Filter } from 'lucide-react';
@@ -143,13 +143,19 @@ export default function WordList() {
 
   return (
     <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          My Words <span style={{ fontFamily: 'var(--font-body)', fontWeight: 600, fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>({filtered.length}/{words.length})</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '0.5rem' }}>
+        <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          My Words
+          <span className="chip-count" style={{ fontSize: '0.75rem', padding: '0.2rem 0.55rem' }} aria-label={`${filtered.length} of ${words.length} words shown`}>{filtered.length}/{words.length}</span>
           {isFetching && !isLoading && <span className="pending-pill" style={{ background: 'var(--color-surface-raised)', borderStyle: 'dashed' }}><Loader2 size={12} className="animate-spin" /> updating…</span>}
         </h2>
-        <button onClick={() => refetch()} className="btn-icon" title="Refresh"><RefreshCw size={18} className={isFetching ? 'animate-spin' : ''} /></button>
+        <button onClick={() => refetch()} className="btn-icon" title="Refresh list" aria-label="Refresh word list"><RefreshCw size={18} className={isFetching ? 'animate-spin' : ''} /></button>
       </div>
+      {words.length > 0 && (
+        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.84rem', margin: '-0.5rem 0 1rem' }}>
+          Your flashcard deck — tap the speaker to hear a card, hover for actions.
+        </p>
+      )}
 
       {error && <div className="status-msg error">{error}</div>}
       {actionError && (
@@ -163,7 +169,10 @@ export default function WordList() {
         <>
           <div className="search-wrapper">
             <Search size={16} className="search-icon" />
-            <input type="text" className="search-input" placeholder="Search — Großüber or house…" value={search} onChange={e => setSearch(e.target.value)} />
+            <input type="text" className="search-input" placeholder="Search — Großüber or house…" value={search} onChange={e => setSearch(e.target.value)} aria-label="Search words" style={search ? { paddingRight: '2.4rem' } : undefined} />
+            {search && (
+              <button className="search-clear" onClick={() => setSearch('')} aria-label="Clear search" title="Clear search"><X size={15} /></button>
+            )}
           </div>
 
           <div className="filter-chips" role="group" aria-label="Filter words">
@@ -201,8 +210,8 @@ export default function WordList() {
       {words.length === 0 && !isLoading && (
         <div className="empty-state">
           <div className="empty-backpack"><Backpack size={32} /></div>
-          <h3>Noch leer — let's pack it!</h3>
-          <p>Your suitcase is waiting. Add your first word to start the streak.</p>
+          <h3>No flashcards yet</h3>
+          <p>Your deck is waiting. Add your first card to start the streak.</p>
           <p className="hint">Try “Fernweh”, “Feierabend”, or “Moin” — ä ö ü ß fully supported.</p>
         </div>
       )}
@@ -220,7 +229,8 @@ export default function WordList() {
         </div>
       )}
 
-      <div className="word-grid">
+      <motion.div className="word-grid" layout={!shouldReduce}>
+        <AnimatePresence mode="popLayout">
         {filtered.map((word, idx) => {
           const pending = !word.audio_url;
           const isEditing = editingId === word.id;
@@ -228,9 +238,11 @@ export default function WordList() {
           return (
             <motion.div
               key={word.id}
-              className={`word-tile ${isEditing ? 'editing' : ''}`}
+              layout={!shouldReduce}
+              className={`word-tile ${isEditing ? 'editing' : ''} ${pending && !isEditing ? 'tile-pending' : ''}`}
               initial={shouldReduce ? false : { opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
+              exit={shouldReduce ? {} : { opacity: 0, scale: 0.96 }}
               transition={{ duration: 0.18, delay: Math.min(idx * 0.02, 0.12) }}
             >
               {isEditing ? (
@@ -314,7 +326,8 @@ export default function WordList() {
             </motion.div>
           );
         })}
-      </div>
+        </AnimatePresence>
+      </motion.div>
     </div>
   );
 }
