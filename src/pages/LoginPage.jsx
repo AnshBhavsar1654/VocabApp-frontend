@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { friendlyError } from "../lib/errors";
-import { LogIn, Mail, Lock, Loader2, Globe } from "lucide-react";
+import { LogIn, Mail, Lock, Loader2, Eye, EyeOff, Volume2, Layers, Flame } from "lucide-react";
+import AuthLayout from "../components/auth/AuthLayout";
+import GoogleIcon from "../components/auth/GoogleIcon";
 
 export default function LoginPage() {
   const { signIn, signInWithGoogle } = useAuth();
@@ -11,6 +13,7 @@ export default function LoginPage() {
   const from = location.state?.from || "/app";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -41,44 +44,76 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-dvh bg-(--color-bg) grid place-items-center px-4 py-8">
-      <div className="card w-full max-w-md">
-        <h2 style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}><LogIn size={18} /> Welcome back</h2>
-        <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem", marginTop: "0.3rem", marginBottom: "1.25rem" }}>
-          Sign in to your WortSchatz — your words are private to you.
-        </p>
-        {error && <div className="status-msg error">{error}</div>}
-        <form onSubmit={handleSubmit}>
-          <div className="input-group">
-            <label className="input-label" htmlFor="login-email">Email</label>
-            <div style={{ position: "relative" }}>
-              <input id="login-email" type="email" className="text-input" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" required style={{ paddingLeft: "2.2rem" }} />
-              <Mail size={16} style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-faint)" }} />
-            </div>
+    <AuthLayout
+      title={<><LogIn size={20} /> Welcome back</>}
+      beforeAccent="Pick up"
+      accentWord="right where"
+      afterAccent="you left off."
+      description="Your words, groups, and streaks are waiting — private to your account, ready on any device."
+      points={[
+        { icon: Volume2, title: "Every word speaks", sub: "Spoken audio on each entry you saved" },
+        { icon: Layers, title: "Groups stay organised", sub: "Reisen, Verben, exam chapters — as you left them" },
+        { icon: Flame, title: "Streak keeps counting", sub: "One quick quiz extends today's Tag Streak" },
+      ]}
+    >
+      <p className="auth-sub">Sign in to your WortSchatz to keep learning.</p>
+      {error && <div className="status-msg error" role="alert">{error}</div>}
+      <form onSubmit={handleSubmit} noValidate={false}>
+        <div className="auth-field">
+          <label className="input-label" htmlFor="login-email">Email</label>
+          <div className="auth-input-wrap">
+            <input
+              id="login-email"
+              type="email"
+              className="text-input"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+              autoComplete="email"
+              aria-invalid={error ? true : undefined}
+            />
+            <span className="auth-input-icon"><Mail size={16} /></span>
           </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="login-password">Password</label>
-            <div style={{ position: "relative" }}>
-              <input id="login-password" type="password" className="text-input" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" required style={{ paddingLeft: "2.2rem" }} />
-              <Lock size={16} style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-faint)" }} />
-            </div>
-          </div>
-          <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? <Loader2 size={18} className="animate-spin" /> : <LogIn size={18} />} Sign in
-          </button>
-        </form>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "1rem 0" }}>
-          <div style={{ flex: 1, height: 1, background: "var(--color-border)" }} />
-          <span style={{ fontSize: "0.78rem", color: "var(--color-text-faint)", fontWeight: 600 }}>OR</span>
-          <div style={{ flex: 1, height: 1, background: "var(--color-border)" }} />
         </div>
-        <button onClick={handleGoogle} disabled={googleLoading} className="btn-primary-style" style={{ width: "100%", background: "var(--color-surface)", color: "var(--color-text)", borderColor: "var(--color-border)" }}>
-          {googleLoading ? <Loader2 size={18} className="animate-spin" /> : <Globe size={18} />} Continue with Google
+        <div className="auth-field">
+          <div className="auth-field-row">
+            <label className="input-label" htmlFor="login-password" style={{ marginBottom: "0.35rem" }}>Password</label>
+          </div>
+          <div className="auth-input-wrap">
+            <input
+              id="login-password"
+              type={showPassword ? "text" : "password"}
+              className="text-input has-right"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Your password"
+              required
+              autoComplete="current-password"
+            />
+            <span className="auth-input-icon"><Lock size={16} /></span>
+            <button
+              type="button"
+              className="auth-eye"
+              onClick={() => setShowPassword(v => !v)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              title={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+            </button>
+          </div>
+        </div>
+        <button type="submit" className="btn-primary auth-submit" disabled={loading || googleLoading}>
+          {loading ? <Loader2 size={18} className="animate-spin" /> : <LogIn size={18} />} Sign in
         </button>
-        <p style={{ textAlign: "center", marginTop: "1rem", fontSize: "0.9rem", color: "var(--color-text-muted)" }}>
-          No account? <Link to="/signup" style={{ color: "var(--color-primary)", fontWeight: 700 }}>Sign up</Link>
-        </p>
-      </div>
-    </div>
+      </form>
+      <div className="auth-or"><span>OR</span></div>
+      <button onClick={handleGoogle} disabled={googleLoading || loading} className="auth-google">
+        {googleLoading ? <Loader2 size={18} className="animate-spin" /> : <GoogleIcon />} Continue with Google
+      </button>
+      <p className="auth-switch">
+        No account? <Link to="/signup">Sign up</Link>
+      </p>
+    </AuthLayout>
   );
 }
