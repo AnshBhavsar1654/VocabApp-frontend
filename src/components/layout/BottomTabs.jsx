@@ -3,7 +3,7 @@ import { Layers, BookOpen, Plus, Sparkles } from "lucide-react";
 import { PATHS } from "../../routes/paths";
 
 const NAV_ITEMS = [
-  { path: PATHS.HOME, label: "Add Word", icon: Plus },
+  { path: PATHS.APP, label: "Add Word", icon: Plus },
   { path: PATHS.WORDS, label: "My Words", icon: BookOpen },
   { path: PATHS.GROUPS, label: "Groups", icon: Layers },
   { path: PATHS.QUIZ, label: "Quiz", icon: Sparkles },
@@ -19,7 +19,7 @@ export default function BottomTabs() {
         <NavLink
           key={path}
           to={path}
-          end={path === PATHS.HOME}
+          end={path === PATHS.APP}
           className={({ isActive }) =>
             [
               "flex-1 flex flex-col items-center gap-[0.15rem] px-1 py-[0.45rem] rounded-(--radius-md) border-t-[3px] font-(--font-display) font-bold text-[0.66rem] cursor-pointer transition-colors",

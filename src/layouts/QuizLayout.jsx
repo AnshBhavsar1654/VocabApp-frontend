@@ -14,7 +14,7 @@ export default function QuizLayout() {
             </span>
             <button
               className="inline-flex items-center justify-center w-9.5 h-9.5 rounded-sm bg-(--color-surface-raised) border border-(--color-border) text-(--color-text-muted) cursor-pointer hover:bg-(--color-surface-hover) hover:text-(--color-text)"
-              onClick={() => navigate(PATHS.HOME)}
+              onClick={() => navigate(PATHS.APP)}
               title="Exit quiz"
               aria-label="Exit quiz"
             >

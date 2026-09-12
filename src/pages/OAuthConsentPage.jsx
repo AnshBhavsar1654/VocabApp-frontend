@@ -32,7 +32,7 @@ export default function OAuthConsentPage() {
         if (redirectUri) {
           window.location.href = redirectUri;
         } else {
-          navigate("/", { replace: true });
+          navigate("/app", { replace: true });
         }
         return;
       }

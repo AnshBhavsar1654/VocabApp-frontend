@@ -6,8 +6,8 @@ export default function QuizPage() {
   const navigate = useNavigate();
   return (
     <Quiz
-      onExit={() => navigate(PATHS.HOME)}
-      onNeedWords={() => navigate(PATHS.HOME)}
+      onExit={() => navigate(PATHS.APP)}
+      onNeedWords={() => navigate(PATHS.APP)}
     />
   );
 }

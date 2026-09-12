@@ -61,7 +61,7 @@ export default function AuthCallbackPage() {
     const finishAuthed = () => {
       // Best-effort backend synchronization: ensures the profile and default
       // group exist so the account is present in Supabase immediately after login.
-      api.getMe().catch(() => {}).finally(() => finish("/"));
+      api.getMe().catch(() => {}).finally(() => finish("/app"));
     };
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) finishAuthed();

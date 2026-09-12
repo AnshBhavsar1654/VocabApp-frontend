@@ -2,6 +2,7 @@ import { Routes, Route } from "react-router-dom";
 import RootLayout from "../layouts/RootLayout";
 import QuizLayout from "../layouts/QuizLayout";
 import AddWordPage from "../pages/AddWordPage";
+import LandingPage from "../pages/LandingPage";
 import WordsPage from "../pages/WordsPage";
 import GroupsPage from "../pages/GroupsPage";
 import QuizPage from "../pages/QuizPage";
@@ -15,7 +16,8 @@ import ProtectedRoute from "../components/ProtectedRoute";
 export default function AppRoutes() {
   return (
     <Routes>
-      {/* public auth routes */}
+      {/* public landing + auth routes */}
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
@@ -23,7 +25,7 @@ export default function AppRoutes() {
 
       {/* protected */}
       <Route element={<ProtectedRoute><RootLayout /></ProtectedRoute>}>
-        <Route path="/" element={<AddWordPage />} />
+        <Route path="/app" element={<AddWordPage />} />
         <Route path="/words" element={<WordsPage />} />
         <Route path="/groups" element={<GroupsPage />} />
       </Route>

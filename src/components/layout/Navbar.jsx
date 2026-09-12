@@ -6,7 +6,7 @@ import ThemeToggle from "./ThemeToggle";
 import { useAuth } from "../../context/AuthContext";
 
 const NAV_ITEMS = [
-  { path: PATHS.HOME, label: "Add Word", icon: Plus },
+  { path: PATHS.APP, label: "Add Word", icon: Plus },
   { path: PATHS.WORDS, label: "My Words", icon: BookOpen },
   { path: PATHS.GROUPS, label: "Groups", icon: Layers },
   { path: PATHS.QUIZ, label: "Quiz", icon: Sparkles },
@@ -42,7 +42,7 @@ export default function Navbar() {
             <NavLink
               key={path}
               to={path}
-              end={path === PATHS.HOME}
+              end={path === PATHS.APP}
               className={({ isActive }) =>
                 [
                   "inline-flex items-center gap-1.5 px-3.5 py-[0.55rem] rounded-full border font-(--font-display) font-bold text-[0.84rem] cursor-pointer whitespace-nowrap transition-all duration-180",
