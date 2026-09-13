@@ -513,7 +513,9 @@ html[data-theme="dark"] .word-lang.german { color: var(--color-primary); }
   padding: 0.9rem 1rem 0.75rem;
   min-height: 118px;
   box-shadow: var(--shadow-card);
-  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+  /* No transform transition: framer-motion owns transforms (enter, reorder,
+     drag). A CSS transform transition would fight it and make drags lag. */
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
   overflow: visible;
 }
 .word-tile:hover { border-color: var(--color-border-strong); box-shadow: var(--shadow-raised); }
@@ -521,6 +523,40 @@ html[data-theme="dark"] .word-lang.german { color: var(--color-primary); }
 .word-tile.tile-pending { border-style: dashed; border-color: var(--color-accent); }
 .word-tile:has(.group-dropdown) { z-index: 30; }
 .word-grid { overflow: visible; }
+
+/* Drag-to-reorder (Groups page) */
+.drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 32px;
+  flex-shrink: 0;
+  margin-left: -0.35rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: grab;
+  touch-action: none; /* gestures starting on the grip drag the card, never scroll */
+}
+.drag-handle:hover { background: var(--color-surface); border-color: var(--color-border); color: var(--color-text-muted); }
+.drag-handle:active { cursor: grabbing; }
+.word-tile.is-dragging {
+  z-index: 40;
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-raised);
+  transition: none;
+}
+.word-tile.is-dragging .drag-handle { cursor: grabbing; }
+.groups-reorder-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--color-text-faint);
+  font-size: 0.76rem;
+  margin: -0.35rem 0 0.7rem;
+}
 
 .tile-top {
   display: flex;

@@ -171,6 +171,16 @@ export const api = {
     if (!res.ok) throw new Error("Failed to remove word from group");
   },
 
+  setGroupWordOrder: async (groupId, wordIds) => {
+    const res = await authFetch(`${API_URL}/groups/${groupId}/order`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ word_ids: wordIds }),
+    });
+    if (!res.ok) throw new Error("Failed to save order");
+    return res.json().catch(() => ({}));
+  },
+
   getMe: async () => {
     const res = await authFetch(`${API_URL}/auth/me`);
     if (!res.ok) throw new Error("Failed to fetch profile");

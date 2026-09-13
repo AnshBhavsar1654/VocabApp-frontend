@@ -33,6 +33,19 @@ export default function WordList() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteWord(id),
+    onMutate: async (id) => {
+      // Optimistic removal so the card vanishes instantly (with its exit
+      // animation) instead of waiting for the background refetch.
+      await queryClient.cancelQueries({ queryKey: ['words'] });
+      const previousWords = queryClient.getQueryData(['words', user?.id]);
+      queryClient.setQueryData(['words', user?.id], (old) =>
+        Array.isArray(old) ? old.filter((w) => w.id !== id) : old
+      );
+      return { previousWords };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previousWords) queryClient.setQueryData(['words', user?.id], context.previousWords);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['words', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['groups', user?.id] });
@@ -42,7 +55,27 @@ export default function WordList() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => api.updateWord(id, data),
-    onSuccess: () => {
+    onMutate: async ({ id, data }) => {
+      // Optimistic update so the edited card shows the new text instantly,
+      // without waiting for the background refetch.
+      await queryClient.cancelQueries({ queryKey: ['words'] });
+      const previousWords = queryClient.getQueryData(['words', user?.id]);
+      queryClient.setQueryData(['words', user?.id], (old) =>
+        Array.isArray(old) ? old.map((w) => (w.id === id ? { ...w, ...data } : w)) : old
+      );
+      return { previousWords };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previousWords) queryClient.setQueryData(['words', user?.id], context.previousWords);
+    },
+    onSuccess: (updated) => {
+      // Reconcile with server truth (e.g. regenerated audio_url), then
+      // revalidate in the background.
+      if (updated?.id) {
+        queryClient.setQueryData(['words', user?.id], (old) =>
+          Array.isArray(old) ? old.map((w) => (w.id === updated.id ? { ...w, ...updated } : w)) : old
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ['words', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['groupWords'] });
       setEditingId(null);
@@ -229,21 +262,20 @@ export default function WordList() {
         </div>
       )}
 
-      <motion.div className="word-grid" layout={!shouldReduce}>
+      <motion.div className="word-grid">
         <AnimatePresence mode="popLayout">
-        {filtered.map((word, idx) => {
+        {filtered.map((word) => {
           const pending = !word.audio_url;
           const isEditing = editingId === word.id;
           const isOpen = openActionsId === word.id;
           return (
             <motion.div
               key={word.id}
-              layout={!shouldReduce}
               className={`word-tile ${isEditing ? 'editing' : ''} ${pending && !isEditing ? 'tile-pending' : ''}`}
-              initial={shouldReduce ? false : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={shouldReduce ? {} : { opacity: 0, scale: 0.96 }}
-              transition={{ duration: 0.18, delay: Math.min(idx * 0.02, 0.12) }}
+              initial={shouldReduce ? false : { opacity: 0, y: 10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={shouldReduce ? undefined : { opacity: 0, scale: 0.97, transition: { duration: 0.12, ease: 'easeIn' } }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
             >
               {isEditing ? (
                 <>

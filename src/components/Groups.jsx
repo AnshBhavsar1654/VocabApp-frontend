@@ -1,10 +1,69 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import {
+  DndContext, DragOverlay, PointerSensor, TouchSensor, KeyboardSensor,
+  useSensors, useSensor, closestCenter,
+} from '@dnd-kit/core';
+import {
+  SortableContext, rectSortingStrategy, arrayMove,
+  sortableKeyboardCoordinates, useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { api, playAudioWithBuffer } from '../api';
 import { friendlyError } from '../lib/errors';
-import { Layers, Plus, Trash2, Pencil, Check, X, Volume2, Search, Loader2, FolderOpen, Users, Backpack, MoreHorizontal } from 'lucide-react';
+import { Layers, Plus, Trash2, Pencil, Check, X, Volume2, Search, Loader2, FolderOpen, Users, Backpack, MoreHorizontal, GripVertical } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+
+// A single draggable word card. The dnd-kit `listeners` live only on the grip
+// handle, so speaker / remove / menu buttons keep working and page scroll
+// stays usable on touch devices. Enter animation is opacity-only on purpose:
+// dnd-kit owns the transform, and a transform animation would fight it.
+function SortableWordCard({
+  word, pending,
+  audioLoading, audioDisabled, onPlay,
+  showRemove, removing, removeDisabled, onRemove,
+  actionsOpen, onToggleActions,
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: word.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  return (
+    <motion.div
+      ref={setNodeRef}
+      style={style}
+      className={`word-tile${isDragging ? ' is-dragging' : ''}`}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: isDragging ? 0.35 : 1 }}
+      transition={{ duration: 0.16 }}
+    >
+      <div className="tile-top">
+        <button
+          className="drag-handle"
+          {...attributes}
+          {...listeners}
+          title="Drag to reorder"
+          aria-label={`Drag ${word.english_word} to reorder`}
+        >
+          <GripVertical size={15} />
+        </button>
+        <div className="tile-pair">
+          <span className="word-lang"><span className="flag" aria-hidden="true" title="English"><svg viewBox="0 0 60 30" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="60" height="30" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="white" strokeWidth="6"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#C8102E" strokeWidth="4"/><path d="M30 0 V30 M0 15 H60" stroke="white" strokeWidth="10"/><path d="M30 0 V30 M0 15 H60" stroke="#C8102E" strokeWidth="6"/></svg></span> {word.english_word}</span>
+          <span className="word-separator">↔</span>
+          <span className="word-lang german"><span className="flag" aria-hidden="true" title="Deutsch"><svg viewBox="0 0 5 3" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg></span> {word.german_word}</span>
+        </div>
+        {pending ? <span className="pending-pill small" title="Audio generating"><Loader2 size={11} className="animate-spin" /></span> : audioLoading ? <button className="speaker-btn" disabled aria-label="Loading audio"><Loader2 size={16} className="animate-spin" /></button> : <button className="speaker-btn" onClick={onPlay} aria-label="Play audio" disabled={audioDisabled}><Volume2 size={16} /></button>}
+      </div>
+      {pending && <div className="tile-meta"><span className="pending-pill"><Loader2 size={11} className="animate-spin" /> no audio</span></div>}
+      <div className={`tile-actions ${actionsOpen ? 'open' : ''}`}>
+        {showRemove && <button className="btn-icon small danger" onClick={onRemove} title="Remove from group" disabled={removeDisabled}>{removing ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}</button>}
+      </div>
+      <button className="more-btn" onClick={(e)=>{e.stopPropagation(); onToggleActions();}} aria-label="More actions" aria-expanded={actionsOpen}><MoreHorizontal size={16} /></button>
+    </motion.div>
+  );
+}
 
 export default function Groups() {
   const { user } = useAuth();
@@ -33,7 +92,7 @@ export default function Groups() {
     enabled: !!selectedGroupId && !!user,
     staleTime: 60_000,
   });
-  const groupWords = groupWordsData?.words || [];
+  const groupWords = useMemo(() => groupWordsData?.words ?? [], [groupWordsData]);
 
   React.useEffect(() => { if (!selectedGroupId && groups.length > 0) setSelectedGroupId(groups[0].id); }, [groups, selectedGroupId]);
   const selectedGroup = groups.find(g => g.id === selectedGroupId);
@@ -58,6 +117,72 @@ export default function Groups() {
   });
   const addWordsMutation = useMutation({ mutationFn: ({ groupId, wordIds }) => api.addWordsToGroup(groupId, wordIds), onSuccess: (_, { groupId }) => { queryClient.invalidateQueries({ queryKey: ['groupWords', user?.id, groupId] }); queryClient.invalidateQueries({ queryKey: ['groups', user?.id] }); queryClient.invalidateQueries({ queryKey: ['words', user?.id] }); setShowAddWords(false); setAddWordsSearch(''); } });
   const removeWordMutation = useMutation({ mutationFn: ({ groupId, wordId }) => api.removeWordFromGroup(groupId, wordId), onSuccess: (_, { groupId }) => { queryClient.invalidateQueries({ queryKey: ['groupWords', user?.id, groupId] }); queryClient.invalidateQueries({ queryKey: ['groups', user?.id] }); } });
+
+  // Manual card order (drag-to-reorder). The override holds the latest
+  // drag result per group; it wins over the server list until the group
+  // changes or a save fails (then we roll back to server order).
+  const [orderOverride, setOrderOverride] = useState(null); // { groupId, ids }
+  const [activeId, setActiveId] = useState(null);
+  const saveTimer = React.useRef(null);
+  React.useEffect(() => () => clearTimeout(saveTimer.current), []);
+  // No reset effect needed: orderedWords ignores overrides whose groupId
+  // doesn't match the selected group, and the next drag overwrites them.
+
+  const orderedWords = useMemo(() => {
+    if (!orderOverride || orderOverride.groupId !== selectedGroupId) return groupWords;
+    const byId = new Map(groupWords.map(w => [w.id, w]));
+    const seen = new Set();
+    const ordered = [];
+    for (const id of orderOverride.ids) {
+      const w = byId.get(id);
+      if (w) { ordered.push(w); seen.add(id); }
+    }
+    // Words added since the last reorder go at the end, in server order.
+    for (const w of groupWords) if (!seen.has(w.id)) ordered.push(w);
+    return ordered;
+  }, [groupWords, orderOverride, selectedGroupId]);
+
+  const orderMutation = useMutation({
+    mutationFn: ({ groupId, wordIds }) => api.setGroupWordOrder(groupId, wordIds),
+    onSuccess: (_, { groupId }) => {
+      queryClient.invalidateQueries({ queryKey: ['groupWords', user?.id, groupId] });
+    },
+    onError: (err) => {
+      setOrderOverride(null);
+      setActionError(friendlyError(err, "Couldn't save the new order. Please try again."));
+    },
+  });
+
+  const handleReorder = (newIds) => {
+    if (!selectedGroupId) return;
+    setOrderOverride({ groupId: selectedGroupId, ids: newIds });
+    // Debounced autosave — one PATCH per completed drag, not per movement.
+    clearTimeout(saveTimer.current);
+    const gid = selectedGroupId;
+    saveTimer.current = setTimeout(() => {
+      orderMutation.mutate({ groupId: gid, wordIds: newIds });
+    }, 600);
+  };
+
+  // Grid-aware drag sensors: mouse drags start after a small movement (so
+  // button clicks still work), touch drags after a long-press (so page
+  // scroll still works), plus full keyboard support.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    setActiveId(null);
+    if (!over || !selectedGroupId || active.id === over.id) return;
+    const ids = orderedWords.map(w => w.id);
+    const from = ids.indexOf(active.id);
+    const to = ids.indexOf(over.id);
+    if (from < 0 || to < 0) return;
+    handleReorder(arrayMove(ids, from, to));
+  };
 
   const handleCreate = () => { const n = newGroupName.trim(); if (!n) return; setActionError(null); createGroupMutation.mutate(n, { onError: e => setActionError(friendlyError(e, "Couldn't create that group. Please try again.")) }); };
   const handleRename = () => { const n = editingName.trim(); if (!n || !editTarget) return; setActionError(null); renameGroupMutation.mutate({ groupId: editTarget.id, name: n }, { onError: e => setActionError(friendlyError(e, "Couldn't rename that group. Please try again.")) }); };
@@ -171,9 +296,10 @@ export default function Groups() {
         {selectedGroup ? (
           <>
             <div className="groups-panel-header">
-              <h2>{selectedGroup.is_default ? <FolderOpen size={18} /> : <Layers size={18} />}{selectedGroup.name}<span className="groups-panel-count">({groupWords.length})</span>{groupFetching && !groupLoading && <Loader2 size={14} className="animate-spin" />}</h2>
+              <h2>{selectedGroup.is_default ? <FolderOpen size={18} /> : <Layers size={18} />}{selectedGroup.name}<span className="groups-panel-count">({groupWords.length})</span>{(groupFetching && !groupLoading) || orderMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : null}</h2>
               <button className="btn-primary-style btn-sm" onClick={() => setShowAddWords(true)}><Plus size={14} /> Add Words</button>
             </div>
+            <p className="groups-reorder-hint"><GripVertical size={12} /> Drag the grip to reorder — saved automatically</p>
             {groupLoading ? (
               <div className="word-grid" aria-busy="true" aria-label="Loading words">
                 {[1,2,3,4,5,6].map(i => (
@@ -188,29 +314,56 @@ export default function Groups() {
                 <p className="hint">Cards live in Ungrouped until you sort them.</p>
               </div>
             ) : (
-              <div className="word-grid">
-                {groupWords.map((word, i) => {
-                  const pending = !word.audio_url;
-                  const isOpen = openActionsId === word.id;
-                  return (
-                    <motion.div key={word.id} className="word-tile" initial={shouldReduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.16, delay: Math.min(i * 0.02, 0.1) }}>
-                      <div className="tile-top">
-                        <div className="tile-pair">
-                          <span className="word-lang"><span className="flag" aria-hidden="true" title="English"><svg viewBox="0 0 60 30" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="60" height="30" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="white" strokeWidth="6"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#C8102E" strokeWidth="4"/><path d="M30 0 V30 M0 15 H60" stroke="white" strokeWidth="10"/><path d="M30 0 V30 M0 15 H60" stroke="#C8102E" strokeWidth="6"/></svg></span> {word.english_word}</span>
-                          <span className="word-separator">↔</span>
-                          <span className="word-lang german"><span className="flag" aria-hidden="true" title="Deutsch"><svg viewBox="0 0 5 3" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg></span> {word.german_word}</span>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={(e) => setActiveId(e.active.id)}
+                onDragEnd={handleDragEnd}
+                onDragCancel={() => setActiveId(null)}
+              >
+                <SortableContext items={orderedWords.map(w => w.id)} strategy={rectSortingStrategy}>
+                  <div className="word-grid" aria-label={`${selectedGroup.name} words, drag the grip to reorder`}>
+                    {orderedWords.map((word) => {
+                      const pending = !word.audio_url;
+                      const isOpen = openActionsId === word.id;
+                      return (
+                        <SortableWordCard
+                          key={word.id}
+                          word={word}
+                          pending={pending}
+                          audioLoading={audioLoadingId === word.id}
+                          audioDisabled={audioLoadingId !== null}
+                          onPlay={() => handlePlay(word.audio_url, word.id)}
+                          showRemove={!selectedGroup.is_default}
+                          removing={removeWordMutation.isPending && removeWordMutation.variables?.wordId === word.id}
+                          removeDisabled={removeWordMutation.isPending || audioLoadingId !== null}
+                          onRemove={() => handleRemove(word.id)}
+                          actionsOpen={isOpen}
+                          onToggleActions={() => setOpenActionsId(isOpen ? null : word.id)}
+                        />
+                      );
+                    })}
+                  </div>
+                </SortableContext>
+                <DragOverlay>
+                  {activeId ? (() => {
+                    const word = orderedWords.find(w => w.id === activeId);
+                    if (!word) return null;
+                    return (
+                      <div className="word-tile is-dragging" aria-hidden="true">
+                        <div className="tile-top">
+                          <span className="drag-handle"><GripVertical size={15} /></span>
+                          <div className="tile-pair">
+                            <span className="word-lang">{word.english_word}</span>
+                            <span className="word-separator">↔</span>
+                            <span className="word-lang german">{word.german_word}</span>
+                          </div>
                         </div>
-                        {pending ? <span className="pending-pill small" title="Audio generating"><Loader2 size={11} className="animate-spin" /></span> : audioLoadingId === word.id ? <button className="speaker-btn" disabled aria-label="Loading audio"><Loader2 size={16} className="animate-spin" /></button> : <button className="speaker-btn" onClick={() => handlePlay(word.audio_url, word.id)} aria-label="Play audio"><Volume2 size={16} /></button>}
                       </div>
-                      {pending && <div className="tile-meta"><span className="pending-pill"><Loader2 size={11} className="animate-spin" /> no audio</span></div>}
-                      <div className={`tile-actions ${isOpen ? 'open' : ''}`}>
-                        {!selectedGroup.is_default && <button className="btn-icon small danger" onClick={() => handleRemove(word.id)} title="Remove from group" disabled={removeWordMutation.isPending || audioLoadingId !== null}>{(removeWordMutation.isPending && removeWordMutation.variables?.wordId === word.id) ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}</button>}
-                      </div>
-                      <button className="more-btn" onClick={(e)=>{e.stopPropagation(); setOpenActionsId(isOpen?null:word.id);}} aria-label="More actions" aria-expanded={isOpen}><MoreHorizontal size={16} /></button>
-                    </motion.div>
-                  );
-                })}
-              </div>
+                    );
+                  })() : null}
+                </DragOverlay>
+              </DndContext>
             )}
           </>
         ) : (
