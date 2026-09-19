@@ -22,7 +22,7 @@ import { useAuth } from '../context/AuthContext';
 // dnd-kit owns the transform, and a transform animation would fight it.
 function SortableWordCard({
   word, pending,
-  audioLoading, audioDisabled, onPlay,
+  audioLoading, audioDisabled, isPlaying, onPlay,
   showRemove, removing, removeDisabled, onRemove,
   actionsOpen, onToggleActions,
 }) {
@@ -55,7 +55,7 @@ function SortableWordCard({
           <span className="word-separator">↔</span>
           <span className="word-lang german"><span className="flag" aria-hidden="true" title="Deutsch"><svg viewBox="0 0 5 3" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg></span> {word.german_word}</span>
         </div>
-        {pending ? <span className="pending-pill small" title="Audio generating"><Loader2 size={11} className="animate-spin" /></span> : audioLoading ? <button className="speaker-btn" disabled aria-label="Loading audio"><Loader2 size={16} className="animate-spin" /></button> : <button className="speaker-btn" onClick={onPlay} aria-label="Play audio" disabled={audioDisabled}><Volume2 size={16} /></button>}
+        {pending ? <span className="pending-pill small" title="Audio generating"><Loader2 size={11} className="animate-spin" /></span> : audioLoading ? <button className="speaker-btn" disabled aria-label="Loading audio"><Loader2 size={16} className="animate-spin" /></button> : <button className={`speaker-btn ${isPlaying ? 'is-playing' : ''}`} onClick={onPlay} aria-label="Play audio" disabled={audioDisabled} title={isPlaying ? "Playing…" : "Play audio"}><Volume2 size={16} /></button>}
       </div>
       {(pending || word.pos) && (
         <div className="tile-meta">
@@ -88,6 +88,7 @@ export default function Groups() {
   const [editTarget, setEditTarget] = useState(null);
   const [editingName, setEditingName] = useState('');
   const [audioLoadingId, setAudioLoadingId] = useState(null);
+  const [playingAudioId, setPlayingAudioId] = useState(null);
   const [openActionsId, setOpenActionsId] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -207,7 +208,20 @@ export default function Groups() {
   };
   const handleAdd = (ids) => { if (!selectedGroupId || !ids.length) return; setActionError(null); addWordsMutation.mutate({ groupId: selectedGroupId, wordIds: ids }, { onError: e => setActionError(friendlyError(e, "Couldn't add those words. Please try again.")) }); };
   const handleRemove = (wid) => { if (!selectedGroupId) return; setActionError(null); removeWordMutation.mutate({ groupId: selectedGroupId, wordId: wid }, { onError: e => setActionError(friendlyError(e, "Couldn't remove that word. Please try again.")) }); };
-  const handlePlay = async (url, id) => { if (!url || audioLoadingId) return; setAudioLoadingId(id); try { await playAudioWithBuffer(url); } catch (e) { console.warn('Audio failed', e); } finally { setAudioLoadingId(null); } };
+  const handlePlay = async (url, id) => {
+    if (!url || audioLoadingId || playingAudioId) return;
+    setAudioLoadingId(id);
+    try {
+      setPlayingAudioId(id);
+      setAudioLoadingId(null);
+      await playAudioWithBuffer(url);
+    } catch (e) {
+      console.warn('Audio failed', e);
+    } finally {
+      setAudioLoadingId(null);
+      setPlayingAudioId(null);
+    }
+  };
 
   React.useEffect(() => {
     if (showEdit) return;
@@ -341,6 +355,7 @@ export default function Groups() {
                           pending={pending}
                           audioLoading={audioLoadingId === word.id}
                           audioDisabled={audioLoadingId !== null}
+                          isPlaying={playingAudioId === word.id}
                           onPlay={() => handlePlay(word.audio_url, word.id)}
                           showRemove={!selectedGroup.is_default}
                           removing={removeWordMutation.isPending && removeWordMutation.variables?.wordId === word.id}
@@ -382,8 +397,8 @@ export default function Groups() {
       {/* Create-group dialog */}
       <AnimatePresence>
         {showCreate && (
-          <motion.div className="modal-overlay" onClick={() => setShowCreate(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <motion.div className="modal-content card modal-narrow" role="dialog" aria-modal="true" aria-label="Create new group" onClick={e => e.stopPropagation()} initial={shouldReduce ? false : { scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={shouldReduce ? {} : { scale: 0.96, opacity: 0 }} transition={{ duration: 0.2 }}>
+          <motion.div className="modal-overlay" onClick={() => setShowCreate(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}>
+            <motion.div className="modal-content card modal-narrow" role="dialog" aria-modal="true" aria-label="Create new group" onClick={e => e.stopPropagation()} initial={shouldReduce ? false : { scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={shouldReduce ? {} : { scale: 0.95, opacity: 0, y: 8 }} transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}>
               <div className="modal-header"><h2>New group</h2><button className="btn-icon" onClick={() => setShowCreate(false)}><X size={18} /></button></div>
               <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.75rem' }}>Create a new collection — z.B. “Uni Köln”, “Reise”.</p>
               <div className="input-group">
@@ -402,8 +417,8 @@ export default function Groups() {
       {/* Edit-group dialog */}
       <AnimatePresence>
         {showEdit && editTarget && (
-          <motion.div className="modal-overlay" onClick={() => setShowEdit(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <motion.div className="modal-content card modal-narrow" role="dialog" aria-modal="true" aria-label={`Edit group ${editTarget.name}`} onClick={e => e.stopPropagation()} initial={shouldReduce ? false : { scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={shouldReduce ? {} : { scale: 0.96, opacity: 0 }} transition={{ duration: 0.2 }}>
+          <motion.div className="modal-overlay" onClick={() => setShowEdit(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}>
+            <motion.div className="modal-content card modal-narrow" role="dialog" aria-modal="true" aria-label={`Edit group ${editTarget.name}`} onClick={e => e.stopPropagation()} initial={shouldReduce ? false : { scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={shouldReduce ? {} : { scale: 0.95, opacity: 0, y: 8 }} transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}>
               <div className="modal-header"><h2>Edit group</h2><button className="btn-icon" onClick={() => setShowEdit(false)}><X size={18} /></button></div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}><Layers size={14} /> {editTarget.name} · {editTarget.word_count} words</div>
               <div className="input-group">
@@ -424,8 +439,8 @@ export default function Groups() {
 
       <AnimatePresence>
       {showAddWords && (
-        <motion.div className="modal-overlay" onClick={() => setShowAddWords(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <motion.div className="modal-content card" role="dialog" aria-modal="true" aria-label={`Add words to ${selectedGroup?.name || 'group'}`} onClick={e => e.stopPropagation()} initial={shouldReduce ? false : { scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={shouldReduce ? {} : { scale: 0.96, opacity: 0 }} transition={{ duration: 0.2 }}>
+        <motion.div className="modal-overlay" onClick={() => setShowAddWords(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}>
+          <motion.div className="modal-content card" role="dialog" aria-modal="true" aria-label={`Add words to ${selectedGroup?.name || 'group'}`} onClick={e => e.stopPropagation()} initial={shouldReduce ? false : { scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={shouldReduce ? {} : { scale: 0.95, opacity: 0, y: 8 }} transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}>
             <div className="modal-header"><h2>Add to {selectedGroup?.name}</h2><button className="btn-icon" onClick={() => setShowAddWords(false)} aria-label="Close"><X size={18} /></button></div>
             <div className="search-wrapper" style={{ marginBottom: '0.75rem' }}><Search size={14} className="search-icon" /><input type="text" className="search-input" placeholder="Search…" aria-label="Search words to add" value={addWordsSearch} onChange={e => setAddWordsSearch(e.target.value)} autoFocus /></div>
             <div className="add-words-list">

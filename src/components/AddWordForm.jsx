@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { api, playAudioWithBuffer } from '../api';
 import { friendlyError } from '../lib/errors';
 import { Plus, Volume2, Loader2, Sparkles } from 'lucide-react';
@@ -14,13 +14,21 @@ export default function AddWordForm() {
   const [pos, setPos] = useState(''); // '' = auto-suggest
   const [lastAdded, setLastAdded] = useState(null);
   const [audioLoading, setAudioLoading] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const queryClient = useQueryClient();
   const shouldReduce = useReducedMotion();
 
   const handlePlay = async (url) => {
-    if (!url || audioLoading) return;
+    if (!url || audioLoading || isPlaying) return;
     setAudioLoading(true);
-    try { await playAudioWithBuffer(url); } catch {} finally { setAudioLoading(false); }
+    try {
+      setIsPlaying(true);
+      setAudioLoading(false);
+      await playAudioWithBuffer(url);
+    } catch {} finally {
+      setAudioLoading(false);
+      setIsPlaying(false);
+    }
   };
 
   const addMutation = useMutation({
@@ -112,27 +120,40 @@ export default function AddWordForm() {
         </button>
       </form>
 
-      {lastAdded && (
-        <motion.div className="recently-added" initial={shouldReduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-          <h3>Recently Added</h3>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700 }}><span className="flag" aria-hidden="true" title="English"><svg viewBox="0 0 60 30" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="60" height="30" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="white" strokeWidth="6"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#C8102E" strokeWidth="4"/><path d="M30 0 V30 M0 15 H60" stroke="white" strokeWidth="10"/><path d="M30 0 V30 M0 15 H60" stroke="#C8102E" strokeWidth="6"/></svg></span> {lastAdded.english_word}</span>
-            <span className="word-separator">↔</span>
-            <span style={{ fontWeight: 700, color: 'var(--color-primary-strong)' }}><span className="flag" aria-hidden="true" title="Deutsch"><svg viewBox="0 0 5 3" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg></span> {lastAdded.german_word}</span>
-            <WordBadge pos={lastAdded.pos} />
-            {pendingAudio ? (
-              <span className="pending-pill"><Loader2 size={12} className="animate-spin" /> generating audio…</span>
-            ) : audioLoading ? (
-              <button className="btn-icon" disabled style={{ width: 36, height: 36 }} title="Loading audio"><Loader2 size={18} className="animate-spin" /></button>
-            ) : (
-              <button className="btn-icon" onClick={() => handlePlay(lastAdded.audio_url)} title="Play audio" style={{ width: 36, height: 36 }}>
-                <Volume2 size={18} />
-              </button>
-            )}
-          </div>
-          {pendingAudio && <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '0.4rem' }}>Audio will appear in My Words shortly — polling every few seconds.</p>}
-        </motion.div>
-      )}
+      <AnimatePresence>
+        {lastAdded && (
+          <motion.div
+            className="recently-added"
+            initial={shouldReduce ? false : { opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={shouldReduce ? undefined : { opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+          >
+            <h3>Recently Added</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 700 }}><span className="flag" aria-hidden="true" title="English"><svg viewBox="0 0 60 30" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="60" height="30" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="white" strokeWidth="6"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#C8102E" strokeWidth="4"/><path d="M30 0 V30 M0 15 H60" stroke="white" strokeWidth="10"/><path d="M30 0 V30 M0 15 H60" stroke="#C8102E" strokeWidth="6"/></svg></span> {lastAdded.english_word}</span>
+              <span className="word-separator">↔</span>
+              <span style={{ fontWeight: 700, color: 'var(--color-primary-strong)' }}><span className="flag" aria-hidden="true" title="Deutsch"><svg viewBox="0 0 5 3" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg></span> {lastAdded.german_word}</span>
+              <WordBadge pos={lastAdded.pos} />
+              {pendingAudio ? (
+                <span className="pending-pill"><Loader2 size={12} className="animate-spin" /> generating audio…</span>
+              ) : audioLoading ? (
+                <button className="btn-icon" disabled style={{ width: 36, height: 36 }} title="Loading audio"><Loader2 size={18} className="animate-spin" /></button>
+              ) : (
+                <button
+                  className={`btn-icon ${isPlaying ? 'is-playing text-(--color-accent-strong) bg-(--color-accent-soft) border-(--color-accent)' : ''}`}
+                  onClick={() => handlePlay(lastAdded.audio_url)}
+                  title={isPlaying ? "Playing pronunciation…" : "Play audio"}
+                  style={{ width: 36, height: 36 }}
+                >
+                  <Volume2 size={18} className={isPlaying ? 'animate-pulse' : ''} />
+                </button>
+              )}
+            </div>
+            {pendingAudio && <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '0.4rem' }}>Audio will appear in My Words shortly — polling every few seconds.</p>}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

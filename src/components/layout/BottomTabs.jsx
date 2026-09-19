@@ -22,7 +22,7 @@ export default function BottomTabs() {
           end={path === PATHS.APP}
           className={({ isActive }) =>
             [
-              "flex-1 flex flex-col items-center gap-[0.15rem] px-1 py-[0.45rem] rounded-(--radius-md) border-t-[3px] font-(--font-display) font-bold text-[0.66rem] cursor-pointer transition-colors",
+              "flex-1 flex flex-col items-center gap-[0.15rem] px-1 py-[0.45rem] rounded-(--radius-md) border-t-[3px] font-(--font-display) font-bold text-[0.66rem] cursor-pointer active:scale-[0.94] transition-[background-color,color,border-color,transform] duration-150 ease-[var(--ease-out)]",
               isActive
                 ? "bg-(--color-primary-soft) text-(--color-primary-strong) border-t-(--color-primary) dark:text-(--color-primary)"
                 : "bg-transparent text-(--color-text-muted) border-transparent",

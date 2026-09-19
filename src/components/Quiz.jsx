@@ -21,6 +21,7 @@ export default function Quiz({ onExit, onNeedWords }) {
   const [flipped, setFlipped] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [feedbackAnim, setFeedbackAnim] = useState(null); // Feedback state: "correct" | "incorrect".
   const [sessionError, setSessionError] = useState(null);
@@ -50,13 +51,13 @@ export default function Quiz({ onExit, onNeedWords }) {
       setFlipped(true);
       const isCorrect = res.correct;
       setFeedbackAnim(isCorrect ? 'correct' : 'incorrect');
-      setTimeout(() => setFeedbackAnim(null), 600);
+      setTimeout(() => setFeedbackAnim(null), 500);
       bumpStreak(isCorrect);
       // Record the typed answer immediately; self-assessment follows separately.
       try { await api.recordQuizResult({ word_id: currentQuestion.id, is_correct: isCorrect, self_assessment: null, typed_answer: answer, prompt_lang: currentQuestion.prompt_lang }); } catch {}
       if (isCorrect && res.audio_url) {
-        setAudioLoading(true);
-        try { await playAudioWithBuffer(res.audio_url); } catch {} finally { setAudioLoading(false); }
+        setIsPlaying(true);
+        try { await playAudioWithBuffer(res.audio_url); } catch {} finally { setIsPlaying(false); }
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 900);
       }
@@ -108,9 +109,16 @@ export default function Quiz({ onExit, onNeedWords }) {
   };
 
   const handlePlay = async (url) => {
-    if (!url || audioLoading) return;
+    if (!url || audioLoading || isPlaying) return;
     setAudioLoading(true);
-    try { await playAudioWithBuffer(url); } catch {} finally { setAudioLoading(false); }
+    try {
+      setIsPlaying(true);
+      setAudioLoading(false);
+      await playAudioWithBuffer(url);
+    } catch {} finally {
+      setAudioLoading(false);
+      setIsPlaying(false);
+    }
   };
 
   const handleFlip = useCallback(() => {
@@ -241,7 +249,7 @@ export default function Quiz({ onExit, onNeedWords }) {
         <motion.div
           className="flip-inner"
           animate={shouldReduce ? {} : { rotateY: flipped ? 180 : 0 }}
-          transition={{ duration: 0.45, ease: [0.22,1,0.36,1] }}
+          transition={{ duration: 0.38, ease: [0.23, 1, 0.32, 1] }}
           style={{ transformStyle:'preserve-3d', position:'relative', minHeight: 160 }}
         >
           {/* Card front: translation prompt */}
@@ -277,7 +285,7 @@ export default function Quiz({ onExit, onNeedWords }) {
       <div style={{ display:'flex', justifyContent:'center', margin:'0.9rem 0 0.6rem' }}>
         {pendingAudio ? <span className="pending-pill"><Loader2 size={12} className="animate-spin" /> audio generating…</span>
           : audioLoading ? <button className="play-large-btn" disabled><Loader2 size={16} className="animate-spin" /> Loading…</button>
-          : <button className="play-large-btn" onClick={(e)=>{e.stopPropagation(); handlePlay(currentQuestion.audio_url);}}><Volume2 size={16} /> Listen <span className="hint" style={{ fontSize:'0.68rem', fontWeight:600 }}>(Space)</span></button>}
+          : <button className={`play-large-btn ${isPlaying ? 'is-playing' : ''}`} onClick={(e)=>{e.stopPropagation(); handlePlay(currentQuestion.audio_url);}}><Volume2 size={16} /> {isPlaying ? 'Playing…' : 'Listen'} <span className="hint" style={{ fontSize:'0.68rem', fontWeight:600 }}>(Space)</span></button>}
       </div>
 
       {checkMutation.error && !result && <div className="status-msg error" style={{ marginBottom:'0.75rem' }}>{friendlyError(checkMutation.error, "Couldn't check that answer. Please try again.")}</div>}
@@ -288,10 +296,10 @@ export default function Quiz({ onExit, onNeedWords }) {
             <input ref={inputRef} type="text" className="text-input" value={answer} onChange={e=>setAnswer(e.target.value)} placeholder="Type your translation… ä ö ü ß" autoFocus disabled={checkMutation.isPending} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
           </div>
           <div style={{ display:'flex', gap:'0.5rem' }}>
-            <motion.button type="submit" className="btn-primary" style={{ flex:1 }} disabled={checkMutation.isPending || !answer.trim()} whileTap={shouldReduce?{}:{scale:0.98}}>
+            <motion.button type="submit" className="btn-primary" style={{ flex:1 }} disabled={checkMutation.isPending || !answer.trim()} whileTap={shouldReduce?{}:{scale:0.97}}>
               {checkMutation.isPending ? <Loader2 className="animate-spin" size={18}/> : <ArrowRight size={18}/>} Check
             </motion.button>
-            <button type="button" className="btn-primary-style" style={{ background:'var(--color-surface)', color:'var(--color-text)', borderColor:'var(--color-border)' }} onClick={handleFlip}>Flip to reveal</button>
+            <motion.button type="button" className="btn-primary-style" style={{ background:'var(--color-surface)', color:'var(--color-text)', borderColor:'var(--color-border)' }} onClick={handleFlip} whileTap={shouldReduce?{}:{scale:0.97}}>Flip to reveal</motion.button>
           </div>
           <p style={{ fontSize:'0.72rem', color:'var(--color-text-faint)', textAlign:'center', marginTop:'0.5rem' }}>Flip just shows the answer — your score comes from <strong>Check</strong>.</p>
         </form>
@@ -304,7 +312,7 @@ export default function Quiz({ onExit, onNeedWords }) {
           {!result.correct && <p>The answer was: <strong>{result.correct_answer}</strong></p>}
           <p style={{ fontSize:'0.78rem', color:'var(--color-text-muted)', marginTop:'0.4rem' }}>{result.correct ? 'Correct — great recall!' : 'Incorrect — will appear again soon.'}</p>
           <div style={{ display:'flex', justifyContent:'center', gap:'0.5rem', marginTop:'0.9rem' }}>
-            <button className="btn-primary" style={{ width:'auto', padding:'0.6rem 1.25rem' }} onClick={handleNextFromResult}>Next <ArrowRight size={16}/></button>
+            <motion.button className="btn-primary" style={{ width:'auto', padding:'0.6rem 1.25rem' }} onClick={handleNextFromResult} whileTap={shouldReduce?{}:{scale:0.97}}>Next <ArrowRight size={16}/></motion.button>
           </div>
         </motion.div>
       )}

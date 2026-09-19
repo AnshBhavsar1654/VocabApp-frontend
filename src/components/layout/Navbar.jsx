@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { Layers, BookOpen, Plus, Sparkles, LogOut, User, Shield } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Layers, BookOpen, Plus, Sparkles, LogOut, Shield, Pencil, Check, X, Loader2 } from "lucide-react";
 import { PATHS } from "../../routes/paths";
 import ThemeToggle from "./ThemeToggle";
 import { useAuth } from "../../context/AuthContext";
@@ -13,15 +14,41 @@ const NAV_ITEMS = [
 ];
 
 export default function Navbar() {
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, displayName, initials, isAdmin, signOut, updateProfile } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [savingName, setSavingName] = useState(false);
   const navigate = useNavigate();
+
   const handleSignOut = async () => {
     try { await signOut(); } catch {}
     navigate("/login");
   };
+
+  const handleStartEditName = (e) => {
+    e.stopPropagation();
+    setNameInput(displayName || "");
+    setEditingName(true);
+  };
+
+  const handleSaveName = async (e) => {
+    e.preventDefault();
+    if (!nameInput.trim() || savingName) return;
+    setSavingName(true);
+    try {
+      await updateProfile({ fullName: nameInput.trim() });
+      setEditingName(false);
+    } catch (err) {
+      console.warn("Failed to update name", err);
+    } finally {
+      setSavingName(false);
+    }
+  };
+
   const displayEmail = user?.email || "";
-  const initials = displayEmail ? displayEmail.slice(0,2).toUpperCase() : "??";
+  const headerLabel = displayName || displayEmail;
+
   return (
     <header
       className="sticky top-0 z-20 bg-(--color-surface) border-b border-(--color-border) shadow-(--shadow-card)"
@@ -45,7 +72,7 @@ export default function Navbar() {
               end={path === PATHS.APP}
               className={({ isActive }) =>
                 [
-                  "inline-flex items-center gap-1.5 px-3.5 py-[0.55rem] rounded-full border font-(--font-display) font-bold text-[0.84rem] cursor-pointer whitespace-nowrap transition-all duration-180",
+                  "inline-flex items-center gap-1.5 px-3.5 py-[0.55rem] rounded-full border font-(--font-display) font-bold text-[0.84rem] cursor-pointer whitespace-nowrap active:scale-[0.96] transition-[background-color,color,border-color,transform,box-shadow] duration-150 ease-[var(--ease-out)]",
                   isActive
                     ? "bg-(--color-primary) text-(--color-primary-contrast) border-(--color-primary-strong) shadow-[0_1px_6px_rgba(21,148,106,0.25)]"
                     : "bg-transparent text-(--color-text-muted) border-transparent hover:bg-(--color-surface-raised) hover:text-(--color-text)",
@@ -63,27 +90,101 @@ export default function Navbar() {
           {user && (
             <div className="relative">
               <button
-                onClick={()=>setMenuOpen(v=>!v)}
-                className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-(--radius-md) bg-(--color-surface-raised) border border-(--color-border) text-(--color-text) text-[0.8rem] font-bold cursor-pointer hover:bg-(--color-surface-hover)"
+                onClick={() => { setMenuOpen(v => !v); setEditingName(false); }}
+                className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-(--radius-md) bg-(--color-surface-raised) border border-(--color-border) text-(--color-text) text-[0.8rem] font-bold cursor-pointer active:scale-[0.96] transition-[background-color,border-color,transform] duration-150 ease-[var(--ease-out)] hover:bg-(--color-surface-hover)"
                 aria-label="User menu"
               >
-                <span className="w-7 h-7 rounded-full bg-(--color-primary) text-(--color-primary-contrast) grid place-items-center text-[0.7rem] font-extrabold">{initials}</span>
-                <span className="hidden sm:inline max-w-[16ch] truncate">{displayEmail}</span>
+                <span className="w-7 h-7 rounded-full bg-(--color-primary) text-(--color-primary-contrast) grid place-items-center text-[0.7rem] font-extrabold tracking-tight">{initials}</span>
+                <span className="hidden sm:inline max-w-[16ch] truncate">{headerLabel}</span>
                 {isAdmin && <Shield size={12} className="text-(--color-primary)" />}
               </button>
-              {menuOpen && (
-                <div className="absolute right-0 mt-2 w-64 rounded-(--radius-md) bg-(--color-surface) border border-(--color-border) shadow-(--shadow-raised) p-2 z-30" onMouseLeave={()=>setMenuOpen(false)}>
-                  <div className="px-2 py-1.5 text-[0.8rem]">
-                    <div style={{ display:"flex", alignItems:"center", gap:"0.35rem", fontWeight:700 }}><User size={14}/> {displayEmail}</div>
-                    {isAdmin && <div style={{ fontSize:"0.72rem", color:"var(--color-primary)", fontWeight:700, marginTop:2 }}><Shield size={12} style={{display:"inline", marginRight:4}}/>Admin</div>}
-                    <div style={{ fontSize:"0.72rem", color:"var(--color-text-muted)", marginTop:2, wordBreak:"break-all" }}>{user.id?.slice(0,8)}…</div>
-                  </div>
-                  <div style={{ height:1, background:"var(--color-border)", margin:"6px 0" }} />
-                  <button onClick={handleSignOut} className="w-full text-left inline-flex items-center gap-2 px-2 py-2 rounded-(--radius-sm) text-[0.85rem] font-semibold text-(--color-danger) hover:bg-(--color-danger-soft) cursor-pointer">
-                    <LogOut size={14}/> Sign out
-                  </button>
-                </div>
-              )}
+              <AnimatePresence>
+                {menuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                    transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                    style={{ transformOrigin: "top right" }}
+                    className="absolute right-0 mt-2 w-72 rounded-(--radius-md) bg-(--color-surface) border border-(--color-border) shadow-(--shadow-raised) p-2.5 z-30"
+                    onMouseLeave={() => { setMenuOpen(false); setEditingName(false); }}
+                  >
+                    <div className="px-1.5 py-1">
+                      <div className="flex items-start gap-2.5">
+                        <span className="w-9 h-9 rounded-full bg-(--color-primary) text-(--color-primary-contrast) grid place-items-center text-[0.82rem] font-extrabold shrink-0 tracking-tight">
+                          {initials}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-(--font-display) font-bold text-[0.92rem] text-(--color-text) truncate">
+                              {displayName || "What should we call you?"}
+                            </span>
+                            {!editingName && (
+                              <button
+                                onClick={handleStartEditName}
+                                className="text-(--color-text-faint) hover:text-(--color-primary) p-0.5 rounded cursor-pointer transition-colors"
+                                title={displayName ? "Edit your name" : "Set your name"}
+                                aria-label="Edit name"
+                              >
+                                <Pencil size={12} />
+                              </button>
+                            )}
+                          </div>
+                          <div className="text-[0.74rem] text-(--color-text-muted) truncate">{displayEmail}</div>
+                          {isAdmin && (
+                            <div className="inline-flex items-center gap-1 text-[0.7rem] font-bold text-(--color-primary) mt-0.5">
+                              <Shield size={11} /> Admin
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {editingName && (
+                        <form onSubmit={handleSaveName} className="mt-2.5 mb-1 p-2 rounded-(--radius-sm) bg-(--color-surface-raised) border border-(--color-border)">
+                          <label className="block text-[0.68rem] font-bold text-(--color-text-muted) uppercase tracking-wider mb-1">
+                            What should we call you?
+                          </label>
+                          <div className="flex gap-1.5 items-center">
+                            <input
+                              type="text"
+                              value={nameInput}
+                              onChange={(e) => setNameInput(e.target.value)}
+                              placeholder="e.g. Ansh Bhavsar"
+                              className="text-input py-1 px-2 text-[0.82rem] flex-1"
+                              autoFocus
+                              disabled={savingName}
+                            />
+                            <button
+                              type="submit"
+                              disabled={savingName || !nameInput.trim()}
+                              className="btn-icon small text-(--color-primary)"
+                              title="Save name"
+                            >
+                              {savingName ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingName(false)}
+                              disabled={savingName}
+                              className="btn-icon small"
+                              title="Cancel"
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
+                        </form>
+                      )}
+                    </div>
+                    <div style={{ height: 1, background: "var(--color-border)", margin: "8px 0" }} />
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full text-left inline-flex items-center gap-2 px-2 py-1.5 rounded-(--radius-sm) text-[0.85rem] font-semibold text-(--color-danger) hover:bg-(--color-danger-soft) cursor-pointer active:scale-[0.98] transition-[background-color,transform] duration-150"
+                    >
+                      <LogOut size={14} /> Sign out
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
         </div>

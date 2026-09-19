@@ -2,13 +2,14 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { friendlyError } from "../lib/errors";
-import { UserPlus, Mail, Lock, Loader2, Eye, EyeOff, Sparkles, Volume2, BookOpen } from "lucide-react";
+import { UserPlus, User, Mail, Lock, Loader2, Eye, EyeOff, Sparkles, Volume2, BookOpen } from "lucide-react";
 import AuthLayout from "../components/auth/AuthLayout";
 import GoogleIcon from "../components/auth/GoogleIcon";
 
 export default function SignupPage() {
   const { signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -23,11 +24,12 @@ export default function SignupPage() {
     e.preventDefault();
     setError("");
     setSuccess("");
+    if (!name.trim()) { setError("Please tell us what we should call you."); return; }
     if (password.length < 6) { setError("Your password must be at least 6 characters long."); return; }
     setLoading(true);
     try {
-      await signUp(email.trim(), password);
-      setSuccess("Account created. Check your email to confirm, then sign in.");
+      await signUp(email.trim(), password, name.trim());
+      setSuccess(`Willkommen, ${name.trim()}! Check your email to confirm, then sign in.`);
       setTimeout(() => navigate("/login"), 1500);
     } catch (err) {
       setError(friendlyError(err, "Couldn't create your account. Please try again."));
@@ -60,10 +62,32 @@ export default function SignupPage() {
         { icon: BookOpen, title: "Practice unlocks at 10 cards", sub: "Flip-card practice with streaks and goals" },
       ]}
     >
+      <div className="mb-4 p-3 rounded-(--radius-md) bg-(--color-primary-soft) border border-(--color-primary) text-(--color-primary-strong) dark:text-(--color-primary) text-[0.86rem] font-semibold flex items-center gap-2.5">
+        <Sparkles size={18} className="shrink-0 text-(--color-accent)" />
+        <span>Willkommen! What should we call you?</span>
+      </div>
       <p className="auth-sub">Your own deck, made by you — private per account.</p>
       {error && <div className="status-msg error" role="alert">{error}</div>}
       {success && <div className="status-msg success" role="status">{success}</div>}
       <form onSubmit={handleSubmit}>
+        <div className="auth-field">
+          <label className="input-label" htmlFor="signup-name">What should we call you?</label>
+          <div className="auth-input-wrap">
+            <input
+              id="signup-name"
+              type="text"
+              className="text-input"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Ansh Bhavsar"
+              required
+              autoComplete="name"
+              autoFocus
+            />
+            <span className="auth-input-icon"><User size={16} /></span>
+          </div>
+          <p className="auth-hint">Your first name and surname for your card deck profile.</p>
+        </div>
         <div className="auth-field">
           <label className="input-label" htmlFor="signup-email">Email</label>
           <div className="auth-input-wrap">

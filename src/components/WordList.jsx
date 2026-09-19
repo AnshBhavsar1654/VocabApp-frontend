@@ -20,6 +20,7 @@ export default function WordList() {
   const [search, setSearch] = useState('');
   const [groupDropdownWordId, setGroupDropdownWordId] = useState(null);
   const [audioLoadingId, setAudioLoadingId] = useState(null);
+  const [playingAudioId, setPlayingAudioId] = useState(null);
   const [activeGroupFilter, setActiveGroupFilter] = useState('all');
   const [showPendingOnly, setShowPendingOnly] = useState(false);
   const [openActionsId, setOpenActionsId] = useState(null);
@@ -164,9 +165,18 @@ export default function WordList() {
   };
 
   const handlePlay = async (url, id) => {
-    if (!url || audioLoadingId) return;
+    if (!url || audioLoadingId || playingAudioId) return;
     setAudioLoadingId(id);
-    try { await playAudioWithBuffer(url); } catch (e) { console.warn('Audio play failed', e); } finally { setAudioLoadingId(null); }
+    try {
+      setPlayingAudioId(id);
+      setAudioLoadingId(null);
+      await playAudioWithBuffer(url);
+    } catch (e) {
+      console.warn('Audio play failed', e);
+    } finally {
+      setAudioLoadingId(null);
+      setPlayingAudioId(null);
+    }
   };
 
   if (isLoading) {
@@ -211,9 +221,22 @@ export default function WordList() {
           <div className="search-wrapper">
             <Search size={16} className="search-icon" />
             <input type="text" className="search-input" placeholder="Search — Großüber or house…" value={search} onChange={e => setSearch(e.target.value)} aria-label="Search words" style={search ? { paddingRight: '2.4rem' } : undefined} />
-            {search && (
-              <button className="search-clear" onClick={() => setSearch('')} aria-label="Clear search" title="Clear search"><X size={15} /></button>
-            )}
+            <AnimatePresence>
+              {search && (
+                <motion.button
+                  className="search-clear"
+                  onClick={() => setSearch('')}
+                  aria-label="Clear search"
+                  title="Clear search"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ duration: 0.14, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <X size={15} />
+                </motion.button>
+              )}
+            </AnimatePresence>
           </div>
 
           <div className="filter-chips" role="group" aria-label="Filter words">
@@ -279,11 +302,12 @@ export default function WordList() {
           return (
             <motion.div
               key={word.id}
+              layout="position"
               className={`word-tile ${isEditing ? 'editing' : ''} ${pending && !isEditing ? 'tile-pending' : ''}`}
               initial={shouldReduce ? false : { opacity: 0, y: 10, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={shouldReduce ? undefined : { opacity: 0, scale: 0.97, transition: { duration: 0.12, ease: 'easeIn' } }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
+              exit={shouldReduce ? undefined : { opacity: 0, scale: 0.97, transition: { duration: 0.14, ease: [0.23, 1, 0.32, 1] } }}
+              transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1], layout: { duration: 0.22, ease: [0.23, 1, 0.32, 1] } }}
             >
               {isEditing ? (
                 <>
@@ -319,7 +343,14 @@ export default function WordList() {
                     ) : audioLoadingId === word.id ? (
                       <button className="speaker-btn" disabled aria-label="Loading audio"><Loader2 size={16} className="animate-spin" /></button>
                     ) : (
-                      <button className="speaker-btn" onClick={() => handlePlay(word.audio_url, word.id)} aria-label="Play audio"><Volume2 size={16} /></button>
+                      <button
+                        className={`speaker-btn ${playingAudioId === word.id ? 'is-playing' : ''}`}
+                        onClick={() => handlePlay(word.audio_url, word.id)}
+                        aria-label="Play audio"
+                        title={playingAudioId === word.id ? "Playing pronunciation…" : "Listen to pronunciation"}
+                      >
+                        <Volume2 size={16} />
+                      </button>
                     )}
                   </div>
 
@@ -341,21 +372,31 @@ export default function WordList() {
                   <div className={`tile-actions ${isOpen ? 'open' : ''}`}>
                     <div className="group-dropdown-wrapper">
                       <button className="btn-icon small" onClick={(e) => { e.stopPropagation(); setGroupDropdownWordId(groupDropdownWordId === word.id ? null : word.id); }} title="Manage groups" disabled={toggleGroupMutation.isPending}><Layers size={14} /></button>
-                      {groupDropdownWordId === word.id && (
-                        <div className="group-dropdown" onClick={e => e.stopPropagation()}>
-                          {groups.map(g => {
-                            const inGroup = word.groups?.some(wg => wg.id === g.id);
-                            const toggling = toggleGroupMutation.isPending && toggleGroupMutation.variables?.wordId === word.id && toggleGroupMutation.variables?.groupId === g.id;
-                            return (
-                              <label key={g.id} className="group-dropdown-item">
-                                <input type="checkbox" checked={inGroup} onChange={() => toggleGroup(word.id, g.id)} disabled={toggleGroupMutation.isPending} />
-                                <span>{g.name}</span>
-                                {toggling && <Loader2 size={12} className="animate-spin" style={{ marginLeft: 'auto' }} />}
-                              </label>
-                            );
-                          })}
-                        </div>
-                      )}
+                      <AnimatePresence>
+                        {groupDropdownWordId === word.id && (
+                          <motion.div
+                            className="group-dropdown"
+                            onClick={e => e.stopPropagation()}
+                            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                            transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                            style={{ transformOrigin: 'top right' }}
+                          >
+                            {groups.map(g => {
+                              const inGroup = word.groups?.some(wg => wg.id === g.id);
+                              const toggling = toggleGroupMutation.isPending && toggleGroupMutation.variables?.wordId === word.id && toggleGroupMutation.variables?.groupId === g.id;
+                              return (
+                                <label key={g.id} className="group-dropdown-item">
+                                  <input type="checkbox" checked={inGroup} onChange={() => toggleGroup(word.id, g.id)} disabled={toggleGroupMutation.isPending} />
+                                  <span>{g.name}</span>
+                                  {toggling && <Loader2 size={12} className="animate-spin" style={{ marginLeft: 'auto' }} />}
+                                </label>
+                              );
+                            })}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                     <button className="btn-icon small" onClick={() => startEdit(word)} title="Edit" disabled={deleteMutation.isPending || updateMutation.isPending || audioLoadingId !== null}><Pencil size={14} /></button>
                     <button className="btn-icon small danger" onClick={() => handleDelete(word.id)} title="Delete" disabled={deleteMutation.isPending || audioLoadingId !== null}>{(deleteMutation.isPending && deleteMutation.variables === word.id) ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}</button>
