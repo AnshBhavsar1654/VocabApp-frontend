@@ -5,6 +5,9 @@ import { api, playAudioWithBuffer } from '../api';
 import { friendlyError } from '../lib/errors';
 import { Volume2, Trash2, Loader2, RefreshCw, Pencil, Check, X, Search, Layers, Backpack, Music2, MoreHorizontal, Filter } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import WordBadge from './WordBadge';
+
+const POS_OPTIONS = ['', 'noun', 'verb', 'adjective', 'adverb', 'phrase', 'other'];
 
 export default function WordList() {
   const { user } = useAuth();
@@ -13,6 +16,7 @@ export default function WordList() {
   const [editingId, setEditingId] = useState(null);
   const [editEnglish, setEditEnglish] = useState('');
   const [editGerman, setEditGerman] = useState('');
+  const [editPos, setEditPos] = useState('');
   const [search, setSearch] = useState('');
   const [groupDropdownWordId, setGroupDropdownWordId] = useState(null);
   const [audioLoadingId, setAudioLoadingId] = useState(null);
@@ -124,11 +128,15 @@ export default function WordList() {
   const clearFilters = () => { setActiveGroupFilter('all'); setShowPendingOnly(false); setSearch(''); };
 
   const handleDelete = (id) => { setActionError(null); deleteMutation.mutate(id, { onError: (err) => setActionError(friendlyError(err, "Couldn't delete that word. Please try again.")) }); };
-  const startEdit = (word) => { setEditingId(word.id); setEditEnglish(word.english_word); setEditGerman(word.german_word); setOpenActionsId(null); };
-  const cancelEdit = () => { setEditingId(null); setEditEnglish(''); setEditGerman(''); };
+  const startEdit = (word) => { setEditingId(word.id); setEditEnglish(word.english_word); setEditGerman(word.german_word); setEditPos(word.pos || ''); setOpenActionsId(null); };
+  const cancelEdit = () => { setEditingId(null); setEditEnglish(''); setEditGerman(''); setEditPos(''); };
   const saveEdit = (id) => {
     if (!editEnglish.trim() || !editGerman.trim()) return;
-    updateMutation.mutate({ id, data: { english_word: editEnglish.trim(), german_word: editGerman.trim() } }, { onError: (err) => setActionError(friendlyError(err, "Couldn't save your changes. Please try again.")) });
+    updateMutation.mutate({ id, data: {
+      english_word: editEnglish.trim(),
+      german_word: editGerman.trim(),
+      pos: editPos || null,
+    } }, { onError: (err) => setActionError(friendlyError(err, "Couldn't save your changes. Please try again.")) });
   };
 
   React.useEffect(() => {
@@ -284,6 +292,12 @@ export default function WordList() {
                     <span className="word-separator">↔</span>
                     <input type="text" className="text-input" value={editGerman} onChange={e => setEditGerman(e.target.value)} placeholder="Deutsch" disabled={updateMutation.isPending} />
                   </div>
+                  <div className="tile-edit-fields" style={{ marginTop: '0.4rem' }}>
+                    <select className="text-input" value={editPos} onChange={e => setEditPos(e.target.value)} disabled={updateMutation.isPending} aria-label="Part of speech">
+                      <option value="">POS: auto</option>
+                      {POS_OPTIONS.filter(Boolean).map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
                   <div className="tile-actions editing-actions" style={{ opacity:1, pointerEvents:'auto' }}>
                     <button className="btn-icon" onClick={() => saveEdit(word.id)} disabled={(updateMutation.isPending && updateMutation.variables?.id === word.id) || !editEnglish.trim() || !editGerman.trim()} style={{ color: 'var(--color-success)' }}>
                       {(updateMutation.isPending && updateMutation.variables?.id === word.id) ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
@@ -309,8 +323,11 @@ export default function WordList() {
                     )}
                   </div>
 
-                  {(word.groups?.length > 0 || pending) && (
+                  {(word.groups?.length > 0 || pending || word.pos) && (
                     <div className="tile-meta">
+                      {word.pos && (
+                        <WordBadge pos={word.pos} />
+                      )}
                       {word.groups?.length > 0 && (
                         <div className="word-group-badges">
                           {word.groups.map(g => <span key={g.id} className="group-badge">{g.name}</span>)}

@@ -34,11 +34,11 @@ async function authFetch(url, options = {}) {
 }
 
 export const api = {
-  addWord: async (text, source_lang, entry_type = "word") => {
+  addWord: async (text, source_lang, entry_type = "word", pos = null) => {
     const res = await authFetch(`${API_URL}/words`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, source_lang, entry_type }),
+      body: JSON.stringify({ text, source_lang, entry_type, pos }),
     });
     if (!res.ok) {
       if (res.status === 409) {

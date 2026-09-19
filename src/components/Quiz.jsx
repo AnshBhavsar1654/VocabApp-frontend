@@ -5,6 +5,7 @@ import { api, playAudioWithBuffer } from '../api';
 import { friendlyError } from '../lib/errors';
 import { Volume2, Loader2, ArrowRight, CheckCircle, XCircle, Sparkles, Keyboard, RotateCcw, BookOpen, Trophy } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import WordBadge from './WordBadge';
 
 function burstColors() { return ['#F5A623', '#15946A', '#2EDB8F', '#FFC84A']; }
 
@@ -251,6 +252,11 @@ export default function Quiz({ onExit, onNeedWords }) {
                 <span className="flag" aria-hidden="true">{currentQuestion.prompt_lang==='de' ? <svg viewBox="0 0 5 3" width="22" height="13" style={{borderRadius:2, border:'1px solid var(--color-border)'}}><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg> : <svg viewBox="0 0 60 30" width="22" height="13" style={{borderRadius:2, border:'1px solid var(--color-border)'}}><rect width="60" height="30" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="white" strokeWidth="6"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#C8102E" strokeWidth="4"/><path d="M30 0 V30 M0 15 H60" stroke="white" strokeWidth="10"/><path d="M30 0 V30 M0 15 H60" stroke="#C8102E" strokeWidth="6"/></svg>}</span>
                 <span>{currentQuestion.prompt_word}</span>
               </div>
+              {currentQuestion.pos && (
+                <div style={{ display:'flex', justifyContent:'center', marginTop:'0.3rem' }}>
+                  <WordBadge pos={currentQuestion.pos} />
+                </div>
+              )}
               <p style={{ fontSize:'0.72rem', color:'var(--color-text-faint)', marginTop:'0.4rem' }}>{flipped ? '' : 'Tap card or press Space to reveal'}</p>
             </div>
           </div>

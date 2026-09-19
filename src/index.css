@@ -985,6 +985,14 @@ html[data-theme="dark"] .group-pill.is-default.active .group-pill-count { color:
   border: 1px solid var(--color-accent); padding: 0.15rem 0.5rem; border-radius: var(--radius-pill);
 }
 
+/* Part-of-speech badge (word tiles, group cards, quiz) */
+.pos-badge {
+  display: inline-flex; align-items: center;
+  font-size: 0.68rem; font-weight: 700; white-space: nowrap;
+  background: var(--color-surface-raised); color: var(--color-text-muted);
+  border: 1px solid var(--color-border); padding: 0.12rem 0.45rem; border-radius: var(--radius-pill);
+}
+
 @media (max-width: 860px) {
   .groups-layout { grid-template-columns: 1fr; }
   .groups-sidebar {

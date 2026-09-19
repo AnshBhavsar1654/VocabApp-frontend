@@ -5,11 +5,13 @@ import { api, playAudioWithBuffer } from '../api';
 import { friendlyError } from '../lib/errors';
 import { Plus, Volume2, Loader2, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import WordBadge from './WordBadge';
 
 export default function AddWordForm() {
   const { user } = useAuth();
   const [text, setText] = useState('');
   const [sourceLang, setSourceLang] = useState('en');
+  const [pos, setPos] = useState(''); // '' = auto-suggest
   const [lastAdded, setLastAdded] = useState(null);
   const [audioLoading, setAudioLoading] = useState(false);
   const queryClient = useQueryClient();
@@ -22,12 +24,13 @@ export default function AddWordForm() {
   };
 
   const addMutation = useMutation({
-    mutationFn: ({ text: t, sourceLang: sl, entryType }) => api.addWord(t, sl, entryType),
+    mutationFn: ({ text: t, sourceLang: sl, entryType, pos: p }) => api.addWord(t, sl, entryType, p),
     onSuccess: (word) => {
       queryClient.invalidateQueries({ queryKey: ['words', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['groups', user?.id] });
       setLastAdded(word);
       setText('');
+      setPos('');
     },
   });
 
@@ -35,7 +38,12 @@ export default function AddWordForm() {
     e.preventDefault();
     if (!text.trim()) return;
     const entryType = text.trim().includes(' ') ? 'phrase' : 'word';
-    addMutation.mutate({ text, sourceLang, entryType });
+    addMutation.mutate({
+      text,
+      sourceLang,
+      entryType,
+      pos: pos || null,
+    });
   };
 
   const loading = addMutation.isPending;
@@ -79,6 +87,25 @@ export default function AddWordForm() {
           </div>
         </div>
 
+        <div className="input-group" style={{ marginTop: '0.6rem' }}>
+          <label className="input-label" htmlFor="pos-select">Part of speech (optional)</label>
+          <select
+            id="pos-select"
+            className="text-input"
+            value={pos}
+            onChange={(e) => setPos(e.target.value)}
+            disabled={loading}
+          >
+            <option value="">Auto-detect</option>
+            <option value="noun">Noun</option>
+            <option value="verb">Verb</option>
+            <option value="adjective">Adjective</option>
+            <option value="adverb">Adverb</option>
+            <option value="phrase">Phrase</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
         <button type="submit" className="btn-primary" disabled={loading || !text.trim()}>
           {loading ? <Loader2 className="animate-spin" size={18} /> : <Plus size={18} />}
           {loading ? 'Translating…' : 'Add Entry'}
@@ -92,6 +119,7 @@ export default function AddWordForm() {
             <span style={{ fontWeight: 700 }}><span className="flag" aria-hidden="true" title="English"><svg viewBox="0 0 60 30" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="60" height="30" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="white" strokeWidth="6"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#C8102E" strokeWidth="4"/><path d="M30 0 V30 M0 15 H60" stroke="white" strokeWidth="10"/><path d="M30 0 V30 M0 15 H60" stroke="#C8102E" strokeWidth="6"/></svg></span> {lastAdded.english_word}</span>
             <span className="word-separator">↔</span>
             <span style={{ fontWeight: 700, color: 'var(--color-primary-strong)' }}><span className="flag" aria-hidden="true" title="Deutsch"><svg viewBox="0 0 5 3" width="18" height="11" style={{borderRadius:2, flexShrink:0, border:'1px solid var(--color-border)', display:'inline-block', verticalAlign:'middle'}}><rect width="5" height="1" y="0" fill="#000"/><rect width="5" height="1" y="1" fill="#D00"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg></span> {lastAdded.german_word}</span>
+            <WordBadge pos={lastAdded.pos} />
             {pendingAudio ? (
               <span className="pending-pill"><Loader2 size={12} className="animate-spin" /> generating audio…</span>
             ) : audioLoading ? (

@@ -12,6 +12,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { api, playAudioWithBuffer } from '../api';
 import { friendlyError } from '../lib/errors';
+import WordBadge from './WordBadge';
 import { Layers, Plus, Trash2, Pencil, Check, X, Volume2, Search, Loader2, FolderOpen, Users, Backpack, MoreHorizontal, GripVertical } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -56,7 +57,14 @@ function SortableWordCard({
         </div>
         {pending ? <span className="pending-pill small" title="Audio generating"><Loader2 size={11} className="animate-spin" /></span> : audioLoading ? <button className="speaker-btn" disabled aria-label="Loading audio"><Loader2 size={16} className="animate-spin" /></button> : <button className="speaker-btn" onClick={onPlay} aria-label="Play audio" disabled={audioDisabled}><Volume2 size={16} /></button>}
       </div>
-      {pending && <div className="tile-meta"><span className="pending-pill"><Loader2 size={11} className="animate-spin" /> no audio</span></div>}
+      {(pending || word.pos) && (
+        <div className="tile-meta">
+          {word.pos && (
+            <WordBadge pos={word.pos} />
+          )}
+          {pending && <span className="pending-pill"><Loader2 size={11} className="animate-spin" /> no audio</span>}
+        </div>
+      )}
       <div className={`tile-actions ${actionsOpen ? 'open' : ''}`}>
         {showRemove && <button className="btn-icon small danger" onClick={onRemove} title="Remove from group" disabled={removeDisabled}>{removing ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}</button>}
       </div>
